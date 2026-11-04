@@ -13,7 +13,7 @@ def doErrCheck(err_code, descr):
 
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
-hllDll = WinDLL(os.path.join(_HERE, "DSRemoteConnect64.dll"))
+hllDll = WinDLL(os.path.join(_HERE, "../DSRemoteConnect64.dll"))
 
 dsconInstance = HANDLE()
 doErrCheck(hllDll.dsconCreateInstance(pointer(dsconInstance), 1), "dsconCreateInstance")
