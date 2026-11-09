@@ -5,20 +5,16 @@ import sys
 import numpy as np
 import soundfile as sf
 
-EXIT_OK = 0
-EXIT_NOT_OK = 1
+from src.util import CONFIG_PATH, EXIT_NOT_OK, EXIT_OK, MODES, PROJECT_ROOT
 
-PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
-STATE_FILE = os.path.join(PROJECT_ROOT, "config.json")
 SONG_DIR = os.path.join(PROJECT_ROOT, "song_files")
 SONG_FILES = (os.path.join(SONG_DIR, "first_song.txt"), os.path.join(SONG_DIR, "second_song.txt"))
-MODES = ("music_mix", "natural_sounds")
 
 # Fixed DewesoftX channel names.
 MASTER_CHANNEL = "Master"
 SLIDER_CHANNEL = "Slider"
 
-USAGE = "Usage: write_state.py <mode> [first_song_path] [second_song_path]"
+USAGE = "Usage: write_config.py <mode> [first_song_path] [second_song_path]"
 
 
 def save_state(path, state):
@@ -103,12 +99,12 @@ def main(args):
     }
 
     try:
-        save_state(STATE_FILE, state)
+        save_state(CONFIG_PATH, state)
     except OSError as e:
-        print("Could not write %s: %s" % (STATE_FILE, e), file=sys.stderr)
+        print("Could not write %s: %s" % (CONFIG_PATH, e), file=sys.stderr)
         return EXIT_NOT_OK
 
-    print("Saved state to %s" % STATE_FILE)
+    print("Saved state to %s" % CONFIG_PATH)
     return EXIT_OK
 
 

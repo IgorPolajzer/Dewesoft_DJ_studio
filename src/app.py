@@ -1,16 +1,14 @@
 import time
 
 from src.dsremote import DSRemoteSession
-
-# Process exit codes for the caller.
-EXIT_OK = 0
-EXIT_NOT_OK = 1
+from src.util import EXIT_OK
 
 CHANNELS = ["AI 4"]
 
 
 class DJStudioApp:
-    def __init__(self, host, cmd_port, data_port):
+    def __init__(self, config, host, cmd_port, data_port):
+        self.config = config
         self.host = host
         self.cmd_port = cmd_port
         self.data_port = data_port
