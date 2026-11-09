@@ -1,5 +1,12 @@
 {
-    "mode": "natural_sounds",
-    "first_song": null,
-    "second_song": null
+    "mode": "music_mix",
+    "master_channel": "Master",
+    "first_song": {
+        "path": "C:\\Users\\igor.polajzer\\Desktop\\Dewesoft\\projects\\First_project\\Signal_to_sound_converter\\assets\\songs\\Luke_Bergs_Aurora.mp3",
+        "sample_rate": 44100
+    },
+    "second_song": {
+        "path": "C:\\Users\\igor.polajzer\\Desktop\\Dewesoft\\projects\\First_project\\Signal_to_sound_converter\\assets\\songs\\Spiring_Late_Night.mp3",
+        "sample_rate": 44100
+    }
 }
