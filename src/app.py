@@ -1,10 +1,12 @@
+import time
+
 from src.dsremote import DSRemoteSession
 
 # Process exit codes for the caller.
 EXIT_OK = 0
 EXIT_NOT_OK = 1
 
-CHANNELS = ["AI 4", "Crossfade"]
+CHANNELS = ["AI 4"]
 
 
 class DJStudioApp:
@@ -18,11 +20,15 @@ class DJStudioApp:
             channels = session.open_channels(CHANNELS)
 
             session.start(1024)
-            samples, stamps = session.read(channels["AI 4"])
 
-            print(channels)
-            print(samples, stamps)
-            # Switch to Track overview screen
-            pass
+            ai4 = channels["Master"]
+            while True:
+                time.sleep(0.005)
+                samples, stamps = session.read(ai4)
+                if not len(samples):
+                    continue
+
+                print("t=%.5f..%.5f  n=%d  overruns=%d  gaps=%d  %s"
+                      % (stamps[0], stamps[-1], len(samples), ai4.overruns, ai4.gaps, samples))
 
         return EXIT_OK
