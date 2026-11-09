@@ -14,7 +14,11 @@ SONG_DIR = os.path.join(PROJECT_ROOT, "song_files")
 SONG_FILES = (os.path.join(SONG_DIR, "first_song.txt"), os.path.join(SONG_DIR, "second_song.txt"))
 MODES = ("music_mix", "natural_sounds")
 
-USAGE = "Usage: write_state.py <mode> [first_song_path] [second_song_path] <master_channel>"
+# Fixed DewesoftX channel names.
+MASTER_CHANNEL = "Master"
+SLIDER_CHANNEL = "Slider"
+
+USAGE = "Usage: write_state.py <mode> [first_song_path] [second_song_path]"
 
 
 def save_state(path, state):
@@ -46,24 +50,19 @@ def clean(arg):
 
 
 def main(args):
-    if not 2 <= len(args) <= 4:
+    if not 1 <= len(args) <= 3:
         print(USAGE, file=sys.stderr)
         return EXIT_NOT_OK
 
-    # Mode and master channel are mandatory.
+    # Mode is mandatory.
     mode = clean(args[0])
     if mode not in MODES:
         print("Application mode must be one of: %s" % ", ".join(MODES), file=sys.stderr)
         return EXIT_NOT_OK
 
-    master_channel = clean(args[-1])
-    if not master_channel:
-        print("Master channel name must be provided.\n" + USAGE, file=sys.stderr)
-        return EXIT_NOT_OK
-
     # Store optional song paths.
     songs = []
-    for arg in args[1:-1]:
+    for arg in args[1:]:
         path = clean(arg)
         if not path:
             songs.append(None)
@@ -97,7 +96,8 @@ def main(args):
 
     state = {
         "mode": mode,
-        "master_channel": master_channel,
+        "master_channel": MASTER_CHANNEL,
+        "slider_channel": SLIDER_CHANNEL,
         "first_song": {"path": first, "sample_rate": rates[0]},
         "second_song": {"path": second, "sample_rate": rates[1]},
     }
