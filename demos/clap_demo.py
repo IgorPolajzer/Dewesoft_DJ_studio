@@ -23,7 +23,6 @@ import sys
 import threading
 import time
 from ctypes import *
-from ctypes.wintypes import *
 
 import numpy as np
 import sounddevice as sd

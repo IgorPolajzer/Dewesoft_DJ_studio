@@ -1,4 +1,15 @@
+import os
 from ctypes import *
+import socket
+
+# File paths.
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DLL_NAME = "DSRemoteConnect64.dll"
+DLL_PATH = os.path.join(PROJECT_ROOT, DLL_NAME)
+
+# Process exit codes for the caller.
+EXIT_OK = 0
+EXIT_NOT_OK = 1
 
 
 def load_dll(path):
@@ -61,3 +72,13 @@ def load_dll(path):
         fn = getattr(dll, name)
         fn.argtypes, fn.restype = argtypes, c_int
     return dll
+
+
+def check_net_server(host, port, timeout=2.0):
+    """dsconConnect returns 0 even when nothing is listening, so check the
+    Dewesoft NET command port ourselves to get a clear error message."""
+    try:
+        with socket.create_connection((host, int(port)), timeout=timeout):
+            pass
+    except OSError as e:
+        raise RuntimeError("Cannot reach the Dewesoft NET server at %s:%s (%s).\n" % (host, port, e))
