@@ -1,122 +1,174 @@
 import ctypes
-import os
+import sys
 from ctypes import *
-import socket
+from dataclasses import dataclass, field
 
-from src.ds_remote_constants import DSX_NO_ERROR, DSX_END_OF_ENUM, rc_name
+import numpy as np
 
-# File paths.
-PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DLL_NAME = "DSRemoteConnect64.dll"
-DLL_PATH = os.path.join(PROJECT_ROOT, DLL_NAME)
-
-# Dewesoft NET connection settings.
-NET_HOST = "localhost"
-NET_CMD_PORT = "8999"
-NET_DATA_PORT = "8001"
-
-
-def load_dll(path):
-    dll = WinDLL(path)
-
-    # Type aliases matching examples/Cpp/include/DSRemoteConnect.h and DSXInstance.h
-    handle = c_void_p                          # DSXInstanceHandle, ChannelInstanceHandle
-    handle_out = POINTER(c_void_p)             # ...Handle* (the DLL writes a handle)
-    channel_id = c_char_p                      # ChannelID      = char*
-    channel_id_list_out = POINTER(POINTER(c_char_p))  # ChannelIdList* = char***
-
-    # All 38 exports, in the same order as DSRemoteConnect.h; every function returns int.
-    sig = {
-        # Version / buffer
-        "dsconGetVersion":                      [c_char_p, c_size_t],
-        "dsconSetBufferSize":                   [handle, c_int],
-        # Instance and connection
-        "dsconCreateInstance":                  [handle_out, c_int],
-        "dsconConnect":                         [handle, c_char_p],
-        "dsconDestroyInstance":                 [handle],
-        "dsconDisconnect":                      [handle],
-        "dsconGetChannelCount":                 [handle, POINTER(c_size_t)],
-        "dsconChannelGetName":                  [handle, c_char_p, c_size_t],
-        "dsconChannelGetNameUtf8":              [handle, c_char_p, c_size_t, POINTER(c_size_t)],
-        "dsconSetAppWindowVisible":             [handle, c_bool],
-        "dsconChannelSetTransferred":           [handle, c_bool],
-        # Setup, acquisition and storing
-        "dsconLoadSetup":                       [handle, c_char_p],
-        "dsconIsInAqusition":                   [handle, POINTER(c_bool)],
-        "dsconGetState":                        [handle, POINTER(c_int)],
-        "dsconStartMeasurement":                [handle],
-        "dsconStartStoring":                    [handle, c_char_p],
-        "dsconStopStoring":                     [handle],
-        "dsconStopStoringEx":                   [handle, POINTER(c_int)],
-        "dsconStopMeasurement":                 [handle],
-        # Reading data
-        "dsconBeginRead":                       [handle, POINTER(c_double), POINTER(c_double)],
-        "dsconChannelReadScalarData":           [handle, POINTER(POINTER(c_double)), POINTER(POINTER(c_double)), POINTER(c_size_t)],
-        "dsconChannelReadScalarData_2":         [handle, POINTER(c_double), POINTER(c_double), POINTER(c_size_t)],
-        "dsconChannelReadScalarData_2abs":      [handle, POINTER(c_double), POINTER(c_double), POINTER(c_size_t)],
-        "dsconEndRead":                         [handle],
-        "dsconControlChannelWriteData":         [handle, c_double],
-        # Channel properties
-        "dsconGetSampleRate":                   [handle, POINTER(c_double)],
-        "dsconGetChannelType":                  [handle, POINTER(c_int)],
-        "dsconIsChannelControl":                [handle, POINTER(c_bool)],
-        "dsconGetChUnit":                       [handle, c_char_p, c_size_t],
-        # Channel enumeration and instances
-        "dsconEnumerateChannels":               [handle, channel_id_list_out, POINTER(c_size_t)],
-        "dsconFreeEnumerateChannels":           [handle, channel_id_list_out],
-        "dsconCreateChannelInstance":           [handle, channel_id, handle_out],
-        "dsconCreateChannelInstanceByName":     [handle, c_char_p, handle_out],
-        "dsconCreateChannelInstanceByNameUtf8": [handle, c_char_p, handle_out],
-        "dsconFreeChannelInstance":             [handle],
-        "dsconInitChannelIdEnum":               [handle],
-        "dsconGetNextChannelId":                [handle, channel_id],
-        "dsconGetNextChannelIdSize":            [handle, POINTER(c_int)],
-    }
-    for name, argtypes in sig.items():
-        fn = getattr(dll, name)
-        fn.argtypes, fn.restype = argtypes, c_int
-    return dll
+from src.ds_remote_constants import (
+    DSX_CH_SYNC,
+    DSX_CONNECTION_TYPE_NET,
+    DSX_NET_BUFFER_OVERWRITTEN,
+    DSX_TOO_MANY_SAMPLES_AVAILABLE,
+    rc_name,
+)
+from src.dsremote_util import DLL_PATH, GAP_FACTOR, DSRemoteError, check, check_net_server, load_dll
 
 
-def check_net_server(host, port, timeout=2.0):
-    try:
-        with socket.create_connection((host, int(port)), timeout=timeout):
-            pass
-    except OSError as e:
-        raise RuntimeError("Cannot reach the Dewesoft NET server at %s:%s (%s).\n" % (host, port, e))
+@dataclass
+class Channel:
+    name: str
+    handle: c_void_p
+    rate: float
+    unit: str
+    ch_type: int
+    is_control: bool
+    data: object = None  # c_double array
+    stamps: object = None
+    values_np: np.ndarray = field(default=None, repr=False)
+    stamps_np: np.ndarray = field(default=None, repr=False)
+    overruns: int = 0  # rc DSX_NET_BUFFER_OVERWRITTEN / DSX_TOO_MANY_SAMPLES_AVAILABLE
+    gaps: int = 0  # timestamp jumps on sync channels
+    last_stamp: float = None
 
 
-def channel_name(dll, ch):
-    buf = ctypes.create_string_buffer(256)
-    required = c_size_t()
-    dll.dsconChannelGetNameUtf8(ch, buf, len(buf), byref(required))
-    return buf.value.decode("utf-8", errors="replace")
+class DSRemoteSession:
+    def __init__(self, host, cmd_port, data_port, dll_path=DLL_PATH):
+        self.host = host
+        self.cmd_port = cmd_port
+        self.data_port = data_port
+        self.dll_path = dll_path
+        self.dll = None
+        self.inst = c_void_p()
+        self.channels = {}
+        self.capacity = 0
+        self.started = False
 
 
-def list_channels(dll, inst):
-    channels = []
+    def __enter__(self):
+        self.dll = load_dll(self.dll_path)
+        check_net_server(self.host, self.cmd_port)
 
-    # Initialize channel ID enumeration iterator.
-    rc = dll.dsconInitChannelIdEnum(inst)
-    if rc != DSX_NO_ERROR:
-        raise RuntimeError(f"dsconInitChannelIdEnum failed, rc={rc_name(rc)}")
+        check(self.dll.dsconCreateInstance(byref(self.inst), DSX_CONNECTION_TYPE_NET), "dsconCreateInstance")
+        try:
+            conn = ("%s:%s:%s" % (self.host, self.cmd_port, self.data_port)).encode()
+            check(self.dll.dsconConnect(self.inst, conn), "dsconConnect")
 
-    while True:
-        # Get buffer size needed for the next channel id.
-        size = c_int(0)
-        rc = dll.dsconGetNextChannelIdSize(inst, byref(size))
-        if rc < 0 or size.value <= 0:
-            break
+            count = c_size_t()
+            check(self.dll.dsconGetChannelCount(self.inst, byref(count)), "dsconGetChannelCount")
+        except BaseException:
+            self._close()
+            raise
+        return self
 
-        id_buf = ctypes.create_string_buffer(size.value + 1)
-        rc = dll.dsconGetNextChannelId(inst, id_buf)
-        if rc < 0:
-            break
 
-        # The last channel is returned together with DSX_END_OF_ENUM.
-        ch = c_void_p()
-        if dll.dsconCreateChannelInstance(inst, id_buf, byref(ch)) == DSX_NO_ERROR:
-            channels.append((id_buf.value.decode(), channel_name(dll, ch), ch))
-        if rc == DSX_END_OF_ENUM:
-            break
-    return channels
+    def __exit__(self, exc_type, exc, tb):
+        self._close()
+        return False
+
+
+    def open_channels(self, names):
+        if self.started:
+            raise RuntimeError("open_channels() must be called before start()")
+
+        missing = []
+        for name in names:
+
+            handle = c_void_p()
+            rc = self.dll.dsconCreateChannelInstanceByNameUtf8(self.inst, name.encode("utf-8"), byref(handle))
+
+            if rc < 0 or not handle.value:
+                # Channel not found.
+                missing.append(name)
+                continue
+
+            # Create channel instance.
+            rate, ch_type, is_control = c_double(), c_int(), c_bool()
+            unit = ctypes.create_string_buffer(64)
+
+            check(self.dll.dsconGetSampleRate(handle, byref(rate)), "dsconGetSampleRate")
+            check(self.dll.dsconGetChannelType(handle, byref(ch_type)), "dsconGetChannelType")
+            check(self.dll.dsconIsChannelControl(handle, byref(is_control)), "dsconIsChannelControl")
+            check(self.dll.dsconGetChUnit(handle, unit, len(unit)), "dsconGetChUnit")
+
+            self.channels[name] = Channel(name, handle, rate.value,
+                                          unit.value.decode(errors="replace").strip(),
+                                          ch_type.value, is_control.value)
+
+        if missing:
+            raise DSRemoteError("dsconCreateChannelInstanceByNameUtf8", -1,
+                                "channels not found (names are case sensitive): %s" % ", ".join(repr(n) for n in missing))
+
+        return {name: self.channels[name] for name in names}
+
+
+    def start(self, buffer_samples):
+        # Set ring buffer size.
+        check(self.dll.dsconSetBufferSize(self.inst, buffer_samples), "dsconSetBufferSize")
+        self.capacity = buffer_samples
+
+        # Allocate channel buffers.
+        for ch in self.channels.values():
+            ch.data = (c_double * buffer_samples)()
+            ch.stamps = (c_double * buffer_samples)()
+            ch.values_np = np.frombuffer(ch.data, dtype=np.float64)
+            ch.stamps_np = np.frombuffer(ch.stamps, dtype=np.float64)
+
+        # Start measurment.
+        check(self.dll.dsconStartMeasurement(self.inst), "dsconStartMeasurement")
+        self.started = True
+
+    def read(self, ch):
+        # Read all new samples from the channel.
+        n = c_size_t(self.capacity)
+        rc = self.dll.dsconChannelReadScalarData_2(ch.handle, ch.data, ch.stamps, byref(n))
+
+        if rc in (DSX_NET_BUFFER_OVERWRITTEN, DSX_TOO_MANY_SAMPLES_AVAILABLE):
+            ch.overruns += 1
+        else:
+            check(rc, "dsconChannelReadScalarData_2")
+
+        count = n.value
+        values, stamps = ch.values_np[:count], ch.stamps_np[:count]
+
+        if count:
+            # Synchronous channels (add timestamps).
+            if ch.ch_type == DSX_CH_SYNC and ch.last_stamp is not None and ch.rate > 0:
+                if stamps[0] - ch.last_stamp > GAP_FACTOR / ch.rate:
+                    ch.gaps += 1
+
+            ch.last_stamp = stamps[count - 1]
+
+        return values, stamps
+
+    def stop(self):
+        if self.started:
+            self.started = False
+            check(self.dll.dsconStopMeasurement(self.inst), "dsconStopMeasurement")
+
+
+    def _close(self):
+        # Clean up session state.
+        close_steps = []
+        if self.started:
+            close_steps.append(("dsconStopMeasurement", lambda: self.dll.dsconStopMeasurement(self.inst)))
+            self.started = False
+
+        for ch in self.channels.values():
+            close_steps.append(("dsconFreeChannelInstance", lambda h=ch.handle: self.dll.dsconFreeChannelInstance(h)))
+
+        if self.inst.value:
+            close_steps.append(("dsconDisconnect", lambda: self.dll.dsconDisconnect(self.inst)))
+            close_steps.append(("dsconDestroyInstance", lambda: self.dll.dsconDestroyInstance(self.inst)))
+
+        # Execute the lambdas.
+        for fn, call in close_steps:
+            try:
+                rc = call()
+                if rc < 0:
+                    print("WARNING: %s failed: %s" % (fn, rc_name(rc)), file=sys.stderr)
+            except Exception as e:
+                print("WARNING: %s raised %s" % (fn, e), file=sys.stderr)
+
+        self.channels = {}
+        self.inst = c_void_p()
