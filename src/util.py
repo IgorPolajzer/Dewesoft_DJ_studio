@@ -11,6 +11,11 @@ DLL_PATH = os.path.join(PROJECT_ROOT, DLL_NAME)
 EXIT_OK = 0
 EXIT_NOT_OK = 1
 
+# Dewesoft NET connection settings.
+NET_HOST = "localhost"
+NET_CMD_PORT = "8999"
+NET_DATA_PORT = "8001"
+
 
 def load_dll(path):
     dll = WinDLL(path)
