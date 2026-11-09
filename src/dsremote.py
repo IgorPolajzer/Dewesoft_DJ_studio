@@ -1,15 +1,14 @@
+import ctypes
 import os
 from ctypes import *
 import socket
+
+from src.ds_remote_constants import DSX_NO_ERROR, DSX_END_OF_ENUM, rc_name
 
 # File paths.
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DLL_NAME = "DSRemoteConnect64.dll"
 DLL_PATH = os.path.join(PROJECT_ROOT, DLL_NAME)
-
-# Process exit codes for the caller.
-EXIT_OK = 0
-EXIT_NOT_OK = 1
 
 # Dewesoft NET connection settings.
 NET_HOST = "localhost"
@@ -80,10 +79,44 @@ def load_dll(path):
 
 
 def check_net_server(host, port, timeout=2.0):
-    """dsconConnect returns 0 even when nothing is listening, so check the
-    Dewesoft NET command port ourselves to get a clear error message."""
     try:
         with socket.create_connection((host, int(port)), timeout=timeout):
             pass
     except OSError as e:
         raise RuntimeError("Cannot reach the Dewesoft NET server at %s:%s (%s).\n" % (host, port, e))
+
+
+def channel_name(dll, ch):
+    buf = ctypes.create_string_buffer(256)
+    required = c_size_t()
+    dll.dsconChannelGetNameUtf8(ch, buf, len(buf), byref(required))
+    return buf.value.decode("utf-8", errors="replace")
+
+
+def list_channels(dll, inst):
+    channels = []
+
+    # Initialize channel ID enumeration iterator.
+    rc = dll.dsconInitChannelIdEnum(inst)
+    if rc != DSX_NO_ERROR:
+        raise RuntimeError(f"dsconInitChannelIdEnum failed, rc={rc_name(rc)}")
+
+    while True:
+        # Get buffer size needed for the next channel id.
+        size = c_int(0)
+        rc = dll.dsconGetNextChannelIdSize(inst, byref(size))
+        if rc < 0 or size.value <= 0:
+            break
+
+        id_buf = ctypes.create_string_buffer(size.value + 1)
+        rc = dll.dsconGetNextChannelId(inst, id_buf)
+        if rc < 0:
+            break
+
+        # The last channel is returned together with DSX_END_OF_ENUM.
+        ch = c_void_p()
+        if dll.dsconCreateChannelInstance(inst, id_buf, byref(ch)) == DSX_NO_ERROR:
+            channels.append((id_buf.value.decode(), channel_name(dll, ch), ch))
+        if rc == DSX_END_OF_ENUM:
+            break
+    return channels

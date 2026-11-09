@@ -2,9 +2,10 @@ import json
 import os
 import sys
 
-EXIT_OK = 0
-EXIT_NOT_OK = 1
-STATE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "program_state.json")
+from src.app import EXIT_NOT_OK, EXIT_OK
+
+STATE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.json")
+MODES = ("music_mix", "natural_sounds")
 
 
 def save_state(path, state):
@@ -29,8 +30,8 @@ def main(args):
 
     # Mode is mandatory.
     mode = clean(args[0])
-    if not mode:
-        print("Application mode must be provided.", file=sys.stderr)
+    if mode not in MODES:
+        print("Application mode must be one of: %s" % ", ".join(MODES), file=sys.stderr)
         return EXIT_NOT_OK
 
     # Store optional song paths.

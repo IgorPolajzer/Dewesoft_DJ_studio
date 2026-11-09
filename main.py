@@ -1,38 +1,12 @@
 import sys
 
-from src.util import *
-from src.ds_remote_util import *
-
-
-def main(host, cmd_port, data_port):
-    dll = load_dll(DLL_PATH)
-    check_net_server(host, cmd_port)
-
-    inst = c_void_p()
-    rc = dll.dsconCreateInstance(byref(inst), DSX_CONNECTION_TYPE_NET)
-    if rc != DSX_NO_ERROR:
-        raise RuntimeError("dsconCreateInstance failed, rc=%d" % rc)
-
-    # Connect.
-    try:
-        conn = ("%s:%s:%s" % (host, cmd_port, data_port)).encode()
-        if dll.dsconConnect(inst, conn) != DSX_NO_ERROR:
-            raise RuntimeError("dsconConnect(%s) failed" % conn.decode())
-
-    finally:
-        if ch.value:
-            dll.dsconFreeChannelInstance(ch)
-        dll.dsconDisconnect(inst)
-        dll.dsconDestroyInstance(inst)
-
-    # Switch to Track overview screen
-    pass
+from src.app import EXIT_NOT_OK, DJStudioApp
+from src.dsremote import NET_CMD_PORT, NET_DATA_PORT, NET_HOST
 
 
 if "__main__" == __name__:
-    args = sys.argv[1:]
     try:
-        exit_code = main(NET_HOST, NET_CMD_PORT, NET_DATA_PORT)
+        exit_code = DJStudioApp(NET_HOST, NET_CMD_PORT, NET_DATA_PORT).run()
     except KeyboardInterrupt:
         # Ctrl+C before the tap loop started: setup did not finish.
         print("\nInterrupted during setup.", file=sys.stderr)
