@@ -1,13 +1,7 @@
 import sys
 
 from src.util import *
-
-
-# DSRemote values.
-DSX_CONNECTION_TYPE_NET = 1
-DSX_END_OF_ENUM = 1
-DSX_NO_ERROR = 0
-DSX_NET_BUFFER_OVERWRITTEN = -21
+from src.ds_remote_util import *
 
 
 def main(host, cmd_port, data_port):
