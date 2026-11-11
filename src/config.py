@@ -13,7 +13,7 @@ VOLUME_SLIDER_CHANNEL = "Volume_slider"
 
 # Song sample files read by the C++ Scripts.
 SONG_DIR = os.path.join(PROJECT_ROOT, "song_files")
-SONG_FILES = (os.path.join(SONG_DIR, "first_song.txt"), os.path.join(SONG_DIR, "second_song.txt"))
+SONG_FILES = (os.path.join(SONG_DIR, "first_song.bin"), os.path.join(SONG_DIR, "second_song.bin"))
 
 
 class Config:
@@ -105,6 +105,8 @@ def _save_song_samples(src, dst):
     # Write to a temp file first so the C++ Script never reads a half-written file.
     os.makedirs(os.path.dirname(dst), exist_ok=True)
     tmp = dst + ".tmp"
-    np.savetxt(tmp, mono, fmt="%.7g")
+
+    # Raw float32 samples (binary, no text formatting).
+    mono.astype(np.float32).tofile(tmp)
     os.replace(tmp, dst)
     return rate
