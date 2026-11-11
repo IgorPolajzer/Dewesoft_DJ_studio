@@ -1,8 +1,30 @@
+import math
+
 import numpy as np
 import sounddevice as sd
 import soundfile as sf
 
 BLOCK_FRAMES = 256       # fixed callback block size (~5 ms at 48 kHz)
+
+SLIDER_MIN = 0.0
+SLIDER_MAX = 100.0
+
+
+def mix_gains(mixer, volume):
+    """Song gains (gA, gB) from the raw slider values (0..100).
+
+    x = mixer / 100  (0 = only the first song, 1 = only the second song)
+    v = volume / 100 (0 = silent, 1 = full)
+    gA = v² · cos(x·π/2),  gB = v² · sin(x·π/2)
+
+    Equal-power crossfade: gA² + gB² = v⁴, so the loudness stays constant across the fade.
+    v² makes the volume slider feel even along its travel. No headroom: around x = 0.5 the
+    gain sum reaches 1.41, so loud passages of both songs together can clip (accepted).
+    """
+    x = min(max(mixer / SLIDER_MAX, 0.0), 1.0)
+    v = min(max(volume / SLIDER_MAX, 0.0), 1.0)
+    level = v * v
+    return level * math.cos(x * math.pi / 2), level * math.sin(x * math.pi / 2)
 
 
 class SoundPlayer:

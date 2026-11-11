@@ -1,10 +1,18 @@
 import time
 
 from src.dsremote import DSRemoteSession
-from src.sound_player import SoundPlayer
+from src.sound_player import SoundPlayer, mix_gains
 from src.utils.util import EXIT_OK
 
-CHANNELS = ["Master"]
+CHANNELS = ["Mixer_slider", "Volume_slider"]
+
+# DSRemote ring buffer per channel, in samples. The sliders send at most 100 values/s, so any size
+# is far more than one 5 ms poll needs. 102400 worked with Master + one slider in tests.
+BUFFER_SAMPLES = 102400
+POLL_INTERVAL_S = 0.005 # 5ms.
+
+START_MIXER = 0.0
+START_VOLUME = 100.0
 
 
 class DJStudioApp:
@@ -15,29 +23,48 @@ class DJStudioApp:
         self.data_port = data_port
 
     def run(self):
-        player = None
+        mixer, volume = START_MIXER, START_VOLUME
 
+        player = None
         if self.config.mode == "music_mix":
-            player = SoundPlayer(self.config.first_song["path"], self.config.second_song["path"], 1.0, 0.0)
+            player = SoundPlayer(self.config.first_song["path"], self.config.second_song["path"], *mix_gains(mixer, volume))
 
         try:
             with DSRemoteSession(self.host, self.cmd_port, self.data_port) as session:
                 channels = session.open_channels(CHANNELS)
-                session.start(1024)
+                session.start(BUFFER_SAMPLES)
 
                 if player:
                     player.start()
 
-                # Test Master acquisition.
-                ai4 = channels["Master"]
+                mixer_ch = channels["Mixer_slider"]
+                volume_ch = channels["Volume_slider"]
                 while True:
-                    time.sleep(0.005)
-                    samples, stamps = session.read(ai4)
-                    if not len(samples):
-                        continue
+                    try:
+                        time.sleep(POLL_INTERVAL_S)
 
-                    print("t=%.5f..%.5f  n=%d  overruns=%d  gaps=%d  %s"
-                          % (stamps[0], stamps[-1], len(samples), ai4.overruns, ai4.gaps, samples))
+                        # Mixer channel.
+                        new_mixer, new_volume = mixer, volume
+                        values, _ = session.read(mixer_ch)
+                        if len(values):
+                            new_mixer = values[-1]
+
+                        # Volume channel.
+                        values, _ = session.read(volume_ch)
+                        if len(values):
+                            new_volume = values[-1]
+
+                        # Update values.
+                        if (new_mixer, new_volume) != (mixer, volume):
+                            mixer, volume = new_mixer, new_volume
+                            gain_a, gain_b = mix_gains(mixer, volume)
+
+                            if player:
+                                player.set_gains(gain_a, gain_b)
+                    except KeyboardInterrupt:
+                        break
+
+
         finally:
             if player:
                 player.stop()
