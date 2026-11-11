@@ -15,7 +15,10 @@ class DJStudioApp:
         self.data_port = data_port
 
     def run(self):
-        player = SoundPlayer(self.config.first_song["path"], self.config.second_song["path"]) if self.config.mode == "music_mix" else None
+        player = None
+
+        if self.config.mode == "music_mix":
+            player = SoundPlayer(self.config.first_song["path"], self.config.second_song["path"], 1.0, 0.0)
 
         try:
             with DSRemoteSession(self.host, self.cmd_port, self.data_port) as session:

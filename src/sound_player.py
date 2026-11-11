@@ -3,19 +3,18 @@ import sounddevice as sd
 import soundfile as sf
 
 BLOCK_FRAMES = 256       # fixed callback block size (~5 ms at 48 kHz)
-DEFAULT_GAIN = 0.5       # 0.5 + 0.5 can't clip when both songs peak together
 
 
 class SoundPlayer:
-    def __init__(self, first_song_path, second_song_path):
+    def __init__(self, first_song_path, second_song_path, first_gain, second_gain):
         device, rate, channels = _find_wasapi_output()
 
         # Load both song files into RAM, resampled to the device rate.
         self.songs = [_load_audio(path, rate, channels) for path in (first_song_path, second_song_path)]
 
         self.positions = [0, 0] # Positions of songs (sample index).
-        self.gains = [DEFAULT_GAIN, DEFAULT_GAIN] # the gain each song is playing at right now
-        self.target_gains = [DEFAULT_GAIN, DEFAULT_GAIN] # the gain each song should ramp to (set by set_gains)
+        self.gains = [float(first_gain), float(second_gain)] # the gain each song is playing at right now
+        self.target_gains = [float(first_gain), float(second_gain)] # the gain each song should ramp to (set by set_gains)
 
         # Preallocated buffers for the callback.
         self._ramp = np.arange(1, BLOCK_FRAMES + 1, dtype=np.float32) / BLOCK_FRAMES # Ramp shape 1/256..1: fraction of the way from the old to the new gain, per sample.
