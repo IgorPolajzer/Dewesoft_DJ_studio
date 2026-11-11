@@ -1,7 +1,8 @@
 {
     "mode": "music_mix",
     "master_channel": "Master",
-    "slider_channel": "Slider",
+    "mixer_slider_channel": "Mixer_slider",
+    "volume_slider_channel": "Volume_slider",
     "first_song": {
         "path": "C:\\Users\\igor.polajzer\\Desktop\\Dewesoft\\projects\\First_project\\Signal_to_sound_converter\\assets\\songs\\Luke_Bergs_Aurora.mp3",
         "sample_rate": 44100

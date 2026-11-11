@@ -8,7 +8,8 @@ from src.utils.util import CONFIG_PATH, MODES, PROJECT_ROOT
 
 # Fixed DewesoftX channel names.
 MASTER_CHANNEL = "Master"
-SLIDER_CHANNEL = "Slider"
+MIXER_SLIDER_CHANNEL = "Mixer_slider"
+VOLUME_SLIDER_CHANNEL = "Volume_slider"
 
 # Song sample files read by the C++ Scripts.
 SONG_DIR = os.path.join(PROJECT_ROOT, "song_files")
@@ -20,7 +21,8 @@ class Config:
         self.path = path
         self.mode = None
         self.master_channel = None
-        self.slider_channel = None
+        self.mixer_slider_channel = None
+        self.volume_slider_channel = None
         self.first_song = None
         self.second_song = None
 
@@ -36,7 +38,8 @@ class Config:
         try:
             self.mode = data["mode"]
             self.master_channel = data["master_channel"]
-            self.slider_channel = data["slider_channel"]
+            self.mixer_slider_channel = data["mixer_slider_channel"]
+            self.volume_slider_channel = data["volume_slider_channel"]
             self.first_song = data["first_song"]
             self.second_song = data["second_song"]
         except KeyError as e:
@@ -70,7 +73,8 @@ class Config:
 
         self.mode = mode
         self.master_channel = MASTER_CHANNEL
-        self.slider_channel = SLIDER_CHANNEL
+        self.mixer_slider_channel = MIXER_SLIDER_CHANNEL
+        self.volume_slider_channel = VOLUME_SLIDER_CHANNEL
         self.first_song = {"path": paths[0], "sample_rate": rates[0]}
         self.second_song = {"path": paths[1], "sample_rate": rates[1]}
         return self
@@ -79,7 +83,8 @@ class Config:
         state = {
             "mode": self.mode,
             "master_channel": self.master_channel,
-            "slider_channel": self.slider_channel,
+            "mixer_slider_channel": self.mixer_slider_channel,
+            "volume_slider_channel": self.volume_slider_channel,
             "first_song": self.first_song,
             "second_song": self.second_song,
         }

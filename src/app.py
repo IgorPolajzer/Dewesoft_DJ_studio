@@ -4,8 +4,6 @@ from src.dsremote import DSRemoteSession
 from src.sound_player import SoundPlayer, mix_gains
 from src.utils.util import EXIT_OK
 
-CHANNELS = ["Mixer_slider", "Volume_slider"]
-
 # DSRemote ring buffer per channel, in samples. The sliders send at most 100 values/s, so any size
 # is far more than one 5 ms poll needs. 102400 worked with Master + one slider in tests.
 BUFFER_SAMPLES = 102400
@@ -31,14 +29,17 @@ class DJStudioApp:
 
         try:
             with DSRemoteSession(self.host, self.cmd_port, self.data_port) as session:
-                channels = session.open_channels(CHANNELS)
+                mixer_name = self.config.mixer_slider_channel
+                volume_name = self.config.volume_slider_channel
+
+                channels = session.open_channels([mixer_name, volume_name])
                 session.start(BUFFER_SAMPLES)
 
                 if player:
                     player.start()
 
-                mixer_ch = channels["Mixer_slider"]
-                volume_ch = channels["Volume_slider"]
+                mixer_ch = channels[mixer_name]
+                volume_ch = channels[volume_name]
                 while True:
                     try:
                         time.sleep(POLL_INTERVAL_S)
