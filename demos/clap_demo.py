@@ -51,7 +51,7 @@ DSX_CONNECTION_TYPE_NET = 1
 EXIT_OK = 0      # stopped normally (Ctrl+C in the tap loop)
 EXIT_NOT_OK = 1  # any error: DLL, connection, channel setup, read or audio failure
 
-CLAP_FILE = os.path.join(PROJECT_ROOT, "assets", "33-Drums", "33-Drums", "33_Clap_1.aif")
+CLAP_FILE = os.path.join(PROJECT_ROOT, "assets", "33-Drums", "33-Drums", "Clap.aif")
 
 THRESHOLD_MV = 10.0     # trigger when |value| >= 50 mV
 HOLDOFF_S = 0.25        # ignore further crossings for this long after a trigger
