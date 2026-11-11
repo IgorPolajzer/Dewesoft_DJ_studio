@@ -4,7 +4,7 @@ import os
 import numpy as np
 import soundfile as sf
 
-from src.util import CONFIG_PATH, MODES, PROJECT_ROOT
+from src.utils.util import CONFIG_PATH, MODES, PROJECT_ROOT
 
 # Fixed DewesoftX channel names.
 MASTER_CHANNEL = "Master"

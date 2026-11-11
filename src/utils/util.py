@@ -1,7 +1,7 @@
 import os
 
 # Project root folder.
-PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # Process exit codes for the caller.
 EXIT_OK = 0

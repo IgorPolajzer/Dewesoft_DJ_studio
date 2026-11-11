@@ -1,9 +1,10 @@
 import time
 
 from src.dsremote import DSRemoteSession
-from src.util import EXIT_OK
+from src.sound_player import SoundPlayer
+from src.utils.util import EXIT_OK
 
-CHANNELS = ["AI 4"]
+CHANNELS = ["Master"]
 
 
 class DJStudioApp:
@@ -14,19 +15,28 @@ class DJStudioApp:
         self.data_port = data_port
 
     def run(self):
-        with DSRemoteSession(self.host, self.cmd_port, self.data_port) as session:
-            channels = session.open_channels(CHANNELS)
+        player = SoundPlayer(self.config.first_song["path"], self.config.second_song["path"]) if self.config.mode == "music_mix" else None
 
-            session.start(1024)
+        try:
+            with DSRemoteSession(self.host, self.cmd_port, self.data_port) as session:
+                channels = session.open_channels(CHANNELS)
+                session.start(1024)
 
-            ai4 = channels["Master"]
-            while True:
-                time.sleep(0.005)
-                samples, stamps = session.read(ai4)
-                if not len(samples):
-                    continue
+                if player:
+                    player.start()
 
-                print("t=%.5f..%.5f  n=%d  overruns=%d  gaps=%d  %s"
-                      % (stamps[0], stamps[-1], len(samples), ai4.overruns, ai4.gaps, samples))
+                # Test Master acquisition.
+                ai4 = channels["Master"]
+                while True:
+                    time.sleep(0.005)
+                    samples, stamps = session.read(ai4)
+                    if not len(samples):
+                        continue
+
+                    print("t=%.5f..%.5f  n=%d  overruns=%d  gaps=%d  %s"
+                          % (stamps[0], stamps[-1], len(samples), ai4.overruns, ai4.gaps, samples))
+        finally:
+            if player:
+                player.stop()
 
         return EXIT_OK

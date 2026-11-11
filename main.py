@@ -2,8 +2,8 @@ import sys
 
 from src.app import DJStudioApp
 from src.config import Config
-from src.dsremote_util import NET_CMD_PORT, NET_DATA_PORT, NET_HOST
-from src.util import EXIT_NOT_OK
+from src.utils.dsremote_util import NET_CMD_PORT, NET_DATA_PORT, NET_HOST
+from src.utils.util import EXIT_NOT_OK
 
 
 if "__main__" == __name__:

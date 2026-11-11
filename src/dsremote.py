@@ -1,5 +1,6 @@
 import ctypes
 import sys
+import time
 from ctypes import *
 from dataclasses import dataclass, field
 
@@ -12,7 +13,7 @@ from src.ds_remote_constants import (
     DSX_TOO_MANY_SAMPLES_AVAILABLE,
     rc_name,
 )
-from src.dsremote_util import DLL_PATH, GAP_FACTOR, DSRemoteError, check, check_net_server, load_dll
+from src.utils.dsremote_util import DLL_PATH, GAP_FACTOR, DSRemoteError, check, check_net_server, load_dll
 
 
 @dataclass
@@ -117,6 +118,7 @@ class DSRemoteSession:
         # Start measurment.
         check(self.dll.dsconStartMeasurement(self.inst), "dsconStartMeasurement")
         self.started = True
+
 
     def read(self, ch):
         # Read all new samples from the channel.

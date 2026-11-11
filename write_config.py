@@ -1,7 +1,7 @@
 import sys
 
 from src.config import Config
-from src.util import EXIT_NOT_OK, EXIT_OK
+from src.utils import EXIT_NOT_OK, EXIT_OK
 
 USAGE = "Usage: write_config.py <mode> [first_song_path] [second_song_path]"
 

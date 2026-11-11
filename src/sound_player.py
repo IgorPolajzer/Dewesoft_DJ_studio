@@ -1,0 +1,100 @@
+import numpy as np
+import sounddevice as sd
+import soundfile as sf
+
+BLOCK_FRAMES = 256       # fixed callback block size (~5 ms at 48 kHz)
+DEFAULT_GAIN = 0.5       # 0.5 + 0.5 can't clip when both songs peak together
+
+
+class SoundPlayer:
+    def __init__(self, first_song_path, second_song_path):
+        device, rate, channels = _find_wasapi_output()
+
+        # Load both song files into RAM, resampled to the device rate.
+        self.songs = [_load_audio(path, rate, channels) for path in (first_song_path, second_song_path)]
+
+        self.positions = [0, 0] # Positions of songs (sample index).
+        self.gains = [DEFAULT_GAIN, DEFAULT_GAIN] # the gain each song is playing at right now
+        self.target_gains = [DEFAULT_GAIN, DEFAULT_GAIN] # the gain each song should ramp to (set by set_gains)
+
+        # Preallocated buffers for the callback.
+        self._ramp = np.arange(1, BLOCK_FRAMES + 1, dtype=np.float32) / BLOCK_FRAMES # Ramp shape 1/256..1: fraction of the way from the old to the new gain, per sample.
+        self._gain_buf = np.empty(BLOCK_FRAMES, dtype=np.float32)
+        self._mix_buf = np.empty((BLOCK_FRAMES, channels), dtype=np.float32)
+
+        self.stream = sd.OutputStream(device=device, samplerate=rate, channels=channels, dtype="float32",
+                                      blocksize=BLOCK_FRAMES, latency="low", callback=self._callback)
+
+    def set_gains(self, first_gain, second_gain):
+        """Set the target gains; the callback ramps to them over the next block."""
+        self.target_gains[0] = float(first_gain)
+        self.target_gains[1] = float(second_gain)
+
+    def start(self):
+        self.stream.start()
+
+    def stop(self):
+        self.stream.stop()
+        self.stream.close()
+
+    def _callback(self, out, frames, time_info, status):
+        out.fill(0)
+
+        for i, song in enumerate(self.songs):
+            pos = self.positions[i]
+
+            n = min(frames, len(song) - pos)
+            if n <= 0:
+                continue
+
+            # Linear gain ramp from the previous gain to the target over this block.
+            g0, g1 = self.gains[i], self.target_gains[i] # where we are, where we want to be
+
+            # Compute the gain.
+            gain = self._gain_buf[:n]
+            np.multiply(self._ramp[:n], g1 - g0, out=gain)
+            gain += g0
+
+            # Scale this block of the song and add it to the mix.
+            mix = self._mix_buf[:n]
+            np.multiply(song[pos:pos + n], gain[:, None], out=mix)
+            out[:n] += mix
+
+            # Adjust the values for the next block.
+            self.gains[i] = g1
+            self.positions[i] = pos + n
+
+
+def _find_wasapi_output():
+    """Default WASAPI output device. Returns (device_index, sample_rate, channels), channels at most 2 (stereo)."""
+
+    wasapi = next(i for i, h in enumerate(sd.query_hostapis()) if "WASAPI" in h["name"])
+    device = sd.query_hostapis(wasapi)["default_output_device"]
+    info = sd.query_devices(device)
+    return device, int(info["default_samplerate"]), min(2, info["max_output_channels"])
+
+
+def _load_audio(path, rate, channels):
+    """Load an audio file as float32 (frames, channels), resampled to `rate` by linear interpolation."""
+
+    clip, clip_rate = sf.read(path, dtype="float32", always_2d=True)
+    channel_count = clip.shape[1]
+
+    # Adjust sample rate to the device sample rate.
+    if clip_rate != rate:
+        new_sample_count = int(len(clip) * rate / clip_rate)
+        original_timestamps = np.arange(len(clip)) / clip_rate
+        new_timestamps = np.arange(new_sample_count) / rate
+
+        # Resample each channel.
+        resampled = np.empty((new_sample_count, channel_count), dtype=np.float32)
+
+        for c in range(channel_count):
+            resampled[:, c] = np.interp(new_timestamps, original_timestamps, clip[:, c])
+
+        clip = resampled
+
+    if channel_count < channels:
+        clip = np.repeat(clip, channels, axis=1)
+
+    return np.ascontiguousarray(clip[:, :channels])

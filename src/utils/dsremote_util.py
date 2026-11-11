@@ -3,7 +3,7 @@ import socket
 from ctypes import *
 
 from src.ds_remote_constants import rc_name
-from src.util import PROJECT_ROOT
+from src.utils.util import PROJECT_ROOT
 
 # File paths.
 DLL_NAME = "DSRemoteConnect64.dll"
