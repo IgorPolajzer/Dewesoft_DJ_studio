@@ -1,6 +1,7 @@
 import time
 
 from src.dsremote import DSRemoteSession
+from src.encoder_mode import EncoderMode
 from src.sound_player import SoundPlayer, mix_gains
 from src.utils.util import EXIT_OK
 
@@ -12,8 +13,9 @@ POLL_INTERVAL_S = 0.005 # 5ms.
 START_MIXER = 0.0
 START_VOLUME = 100.0
 START_DRUM = 0.0
-START_ENCODER_MODE = 0.0
 DRUM_VOLUME_FACTOR = 1.5
+
+START_ENCODER_MODE = EncoderMode.NOTE
 
 
 class DJStudioApp:
@@ -47,6 +49,7 @@ class DJStudioApp:
                     self.config.drum_selection_channel,
                     self.config.drum_channel,
                     self.config.encoder_mode_channel,
+                    self.config.encoder_channel,
                 ])
                 session.start(BUFFER_SAMPLES)
 
@@ -102,8 +105,20 @@ class DJStudioApp:
                 self.player.play_drum(index, strength, (self.volume * DRUM_VOLUME_FACTOR))
 
     def _encoder(self):
-        """Encoder mode (dropdown)."""
+        """Encoder mode (dropdown) and encoder steps (1 forward, -1 backward, 0 nothing)."""
         values, _ = self.session.read(self.channels[self.config.encoder_mode_channel])
         if len(values):
-            self.encoder_mode = values[-1]
-            print(f"Encoder mode: {self.encoder_mode}.")
+            self.encoder_mode = EncoderMode(int(round(values[-1])))
+
+        values, _ = self.session.read(self.channels[self.config.encoder_channel])
+        match self.encoder_mode:
+            case EncoderMode.NOTE:
+                for value in values:
+                    print(value)
+                    if value != 0 and self.player:
+                        self.player.play_note(int(round(value)))
+
+            case EncoderMode.BPM:
+                pass
+            case EncoderMode.SYNTH:
+                pass

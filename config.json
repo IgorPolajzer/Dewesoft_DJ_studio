@@ -6,6 +6,7 @@
     "drum_selection_channel": "Drum_selection",
     "drum_channel": "Drum/Drum trigger",
     "encoder_mode_channel": "Encoder_mode",
+    "encoder_channel": "Encoder/Angle/Output",
     "first_song": {
         "path": "C:\\Users\\igor.polajzer\\Desktop\\Dewesoft\\projects\\First_project\\Signal_to_sound_converter\\assets\\songs\\Luke_Bergs_Aurora.mp3",
         "sample_rate": 44100

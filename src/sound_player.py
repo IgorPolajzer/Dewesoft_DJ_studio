@@ -16,6 +16,10 @@ SLIDER_MAX = 100.0
 DRUM_DIR = os.path.join(PROJECT_ROOT, "assets", "drums")
 DRUM_STRENGTH_MAX = 10.0  # Drum hit strength 1-10.
 
+# Note sounds.
+NOTE_DIR = os.path.join(PROJECT_ROOT, "assets", "note")
+NOTE_FILES = {1: "forward_note.wav", -1: "backwards_note.wav"}
+
 
 def mix_gains(mixer, volume):
     """Song gains (gA, gB) from the raw slider values (0..100).
@@ -52,6 +56,12 @@ class SoundPlayer:
         self._drum_gain = 0.0
         self._drum_request = None
 
+        # Note sounds.
+        self.notes = {k: _load_audio(os.path.join(NOTE_DIR, f), rate, channels) for k, f in NOTE_FILES.items()}
+        self._note = None
+        self._note_pos = 0
+        self._note_request = None
+
         # Preallocated buffers for the callback.
         self._ramp = np.arange(1, BLOCK_FRAMES + 1, dtype=np.float32) / BLOCK_FRAMES # Ramp shape 1/256..1: fraction of the way from the old to the new gain, per sample.
         self._gain_buf = np.empty(BLOCK_FRAMES, dtype=np.float32)
@@ -72,6 +82,10 @@ class SoundPlayer:
         gain = s * v * v
 
         self._drum_request = (index, float(gain))
+
+    def play_note(self, direction):
+        """Play the forward (1) or backward (-1) note once. A note that is still playing is cut off and replaced."""
+        self._note_request = direction
 
     def start(self):
         self.stream.start()
@@ -126,6 +140,23 @@ class SoundPlayer:
             self._drum_pos = pos + n
             if self._drum_pos >= len(drum):
                 self._drum = None
+
+        # Start a requested note from the beginning, replacing any note that is still playing.
+        request = self._note_request
+        if request is not None:
+            self._note_request = None
+            self._note = self.notes[request]
+            self._note_pos = 0
+
+        # Mix the playing note on top.
+        if self._note is not None:
+            note, pos = self._note, self._note_pos
+            n = min(frames, len(note) - pos)
+            out[:n] += note[pos:pos + n]
+
+            self._note_pos = pos + n
+            if self._note_pos >= len(note):
+                self._note = None
 
 
 def _find_wasapi_output():
