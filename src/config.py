@@ -11,7 +11,7 @@ MASTER_CHANNEL = "Master"
 MIXER_SLIDER_CHANNEL = "Mixer_slider"
 VOLUME_SLIDER_CHANNEL = "Volume_slider"
 DRUM_SELECTION_CHANNEL = "Drum_selection"
-DRUM_CHANNEL = "Drum trigger"
+DRUM_CHANNEL = "Drum/Drum trigger"
 ENCODER_MODE_CHANNEL = "Encoder_mode"
 
 # Song sample files read by the C++ Scripts.
