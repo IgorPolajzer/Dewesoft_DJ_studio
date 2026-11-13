@@ -114,11 +114,8 @@ class DJStudioApp:
         match self.encoder_mode:
             case EncoderMode.NOTE:
                 for value in values:
-                    print(value)
                     if value != 0 and self.player:
                         self.player.play_note(int(round(value)))
 
             case EncoderMode.BPM:
-                pass
-            case EncoderMode.SYNTH:
                 pass
