@@ -26,7 +26,7 @@ def mix_gains(mixer, volume):
 
     Equal-power crossfade: gA² + gB² = v⁴, so the loudness stays constant across the fade.
     v² makes the volume slider feel even along its travel. No headroom: around x = 0.5 the
-    gain sum reaches 1.41, so loud passages of both songs together can clip (accepted).
+    gain sum reaches 1.41, so loud passages of both songs together can clip.
     """
     x = min(max(mixer / SLIDER_MAX, 0.0), 1.0)
     v = min(max(volume / SLIDER_MAX, 0.0), 1.0)

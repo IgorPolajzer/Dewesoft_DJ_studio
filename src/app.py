@@ -12,6 +12,7 @@ POLL_INTERVAL_S = 0.005 # 5ms.
 START_MIXER = 0.0
 START_VOLUME = 100.0
 START_DRUM = 0.0
+START_ENCODER_MODE = 0.0
 DRUM_VOLUME_FACTOR = 1.5
 
 
@@ -24,6 +25,7 @@ class DJStudioApp:
 
     def run(self):
         mixer, volume, drum_selection = START_MIXER, START_VOLUME, START_DRUM
+        encoder_mode = START_ENCODER_MODE
 
         player = None
         if self.config.mode == "music_mix":
@@ -35,8 +37,10 @@ class DJStudioApp:
                 volume_name = self.config.volume_slider_channel
                 drum_selection_name = self.config.drum_selection_channel
                 drum_name = self.config.drum_channel
+                encoder_mode_name = self.config.encoder_mode_channel
 
-                channels = session.open_channels([mixer_name, volume_name, drum_selection_name, drum_name])
+                channels = session.open_channels([mixer_name, volume_name, drum_selection_name, drum_name,
+                                                  encoder_mode_name])
                 session.start(BUFFER_SAMPLES)
 
                 if player:
@@ -46,6 +50,7 @@ class DJStudioApp:
                 volume_ch = channels[volume_name]
                 drum_selection_ch = channels[drum_selection_name]
                 drum_ch = channels[drum_name]
+                encoder_mode_ch = channels[encoder_mode_name]
                 while True:
                     try:
                         time.sleep(POLL_INTERVAL_S)
@@ -84,6 +89,12 @@ class DJStudioApp:
                             if player and 0 <= index < len(player.drums):
                                 print(f"Drum hit (strength level: {strength}).")
                                 player.play_drum(index, strength, (volume * DRUM_VOLUME_FACTOR))
+
+                        # Encoder mode (dropdown).
+                        values, _ = session.read(encoder_mode_ch)
+                        if len(values):
+                            encoder_mode = values[-1]
+                            print(f"Encoder mode: {encoder_mode}.")
 
                     except KeyboardInterrupt:
                         break
