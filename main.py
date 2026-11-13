@@ -1,4 +1,5 @@
 import sys
+from time import sleep
 
 from src.app import DJStudioApp
 from src.config import Config
@@ -18,4 +19,6 @@ if "__main__" == __name__:
         print("ERROR: %s" % e, file=sys.stderr)
         exit_code = EXIT_NOT_OK
 
+
+    # sleep(10)
     sys.exit(exit_code)

@@ -1,13 +1,20 @@
 import math
+import os
 
 import numpy as np
 import sounddevice as sd
 import soundfile as sf
 
-BLOCK_FRAMES = 256       # fixed callback block size (~5 ms at 48 kHz)
+from src.utils.util import PROJECT_ROOT
+
+BLOCK_FRAMES = 256 # fixed callback block size (~5 ms at 48 kHz)
 
 SLIDER_MIN = 0.0
 SLIDER_MAX = 100.0
+
+# Drum sounds.
+DRUM_DIR = os.path.join(PROJECT_ROOT, "assets", "drums")
+DRUM_STRENGTH_MAX = 10.0  # Drum hit strength 1-10.
 
 
 def mix_gains(mixer, volume):
@@ -38,6 +45,13 @@ class SoundPlayer:
         self.gains = [float(first_gain), float(second_gain)] # the gain each song is playing at right now
         self.target_gains = [float(first_gain), float(second_gain)] # the gain each song should ramp to (set by set_gains)
 
+        # Drum sounds.
+        self.drums = [_load_audio(os.path.join(DRUM_DIR, f), rate, channels) for f in sorted(os.listdir(DRUM_DIR))]
+        self._drum = None
+        self._drum_pos = 0
+        self._drum_gain = 0.0
+        self._drum_request = None
+
         # Preallocated buffers for the callback.
         self._ramp = np.arange(1, BLOCK_FRAMES + 1, dtype=np.float32) / BLOCK_FRAMES # Ramp shape 1/256..1: fraction of the way from the old to the new gain, per sample.
         self._gain_buf = np.empty(BLOCK_FRAMES, dtype=np.float32)
@@ -50,6 +64,14 @@ class SoundPlayer:
         """Set the target gains; the callback ramps to them over the next block."""
         self.target_gains[0] = float(first_gain)
         self.target_gains[1] = float(second_gain)
+
+    def play_drum(self, index, strength, volume):
+        """Play drum `index` once at `gain`. A drum that is still playing is cut off and replaced."""
+        s = min(max(strength / DRUM_STRENGTH_MAX, 0.0), 1.0)
+        v = min(max(volume / SLIDER_MAX, 0.0), 1.0)
+        gain = s * v * v
+
+        self._drum_request = (index, float(gain))
 
     def start(self):
         self.stream.start()
@@ -84,6 +106,26 @@ class SoundPlayer:
             # Adjust the values for the next block.
             self.gains[i] = g1
             self.positions[i] = pos + n
+
+        # Start a requested drum from the beginning, replacing any drum that is still playing.
+        request = self._drum_request
+        if request is not None:
+            self._drum_request = None
+            self._drum = self.drums[request[0]]
+            self._drum_gain = request[1]
+            self._drum_pos = 0
+
+        # Mix the playing drum on top of the songs.
+        if self._drum is not None:
+            drum, pos = self._drum, self._drum_pos
+            n = min(frames, len(drum) - pos)
+            mix = self._mix_buf[:n]
+            np.multiply(drum[pos:pos + n], self._drum_gain, out=mix)
+            out[:n] += mix
+
+            self._drum_pos = pos + n
+            if self._drum_pos >= len(drum):
+                self._drum = None
 
 
 def _find_wasapi_output():
