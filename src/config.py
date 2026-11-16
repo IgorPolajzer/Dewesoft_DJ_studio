@@ -3,6 +3,7 @@ import os
 
 import numpy as np
 import soundfile as sf
+from bpm_finder import analyze_audio_file
 
 from src.utils.util import CONFIG_PATH, MODES, PROJECT_ROOT
 
@@ -13,11 +14,15 @@ VOLUME_SLIDER_CHANNEL = "Volume_slider"
 DRUM_SELECTION_CHANNEL = "Drum_selection"
 DRUM_CHANNEL = "Drum trigger"
 ENCODER_MODE_CHANNEL = "Encoder_mode"
-ENCODER_CHANNEL = "Output"
+ENCODER_CHANNEL = "Encoder output"
 
 # Song sample files read by the C++ Scripts.
 SONG_DIR = os.path.join(PROJECT_ROOT, "song_files")
 SONG_FILES = (os.path.join(SONG_DIR, "first_song.bin"), os.path.join(SONG_DIR, "second_song.bin"))
+
+# Song tempo detection (bpm_finder).
+BPM_MIN = 70.0
+BPM_MAX = 180.0
 
 
 class Config:
@@ -74,12 +79,13 @@ class Config:
             paths.append(path)
 
         rates = [None, None]
+        bpms = [None, None]
         if mode == "music_mix":
             if None in paths:
                 raise RuntimeError("music_mix needs both songs.")
             for i, (src, dst) in enumerate(zip(paths, SONG_FILES)):
                 try:
-                    rates[i] = _save_song_samples(src, dst)
+                    rates[i], bpms[i] = _save_song_samples(src, dst)
                 except (OSError, RuntimeError) as e:  # soundfile raises LibsndfileError (RuntimeError)
                     raise RuntimeError("Could not convert %s: %s" % (src, e))
 
@@ -91,8 +97,8 @@ class Config:
         self.drum_channel = DRUM_CHANNEL
         self.encoder_mode_channel = ENCODER_MODE_CHANNEL
         self.encoder_channel = ENCODER_CHANNEL
-        self.first_song = {"path": paths[0], "sample_rate": rates[0]}
-        self.second_song = {"path": paths[1], "sample_rate": rates[1]}
+        self.first_song = {"path": paths[0], "sample_rate": rates[0], "bpm": bpms[0]}
+        self.second_song = {"path": paths[1], "sample_rate": rates[1], "bpm": bpms[1]}
         return self
 
     def write(self):
@@ -129,4 +135,16 @@ def _save_song_samples(src, dst):
     # Raw float32 samples (binary, no text formatting).
     mono.astype(np.float32).tofile(tmp)
     os.replace(tmp, dst)
-    return rate
+
+    return rate, _detect_bpm(mono, rate, dst + ".wav")
+
+
+def _detect_bpm(mono, rate, wav_path):
+    sf.write(wav_path, mono, rate, subtype="PCM_16")
+    try:
+        return analyze_audio_file(wav_path, min_bpm=BPM_MIN, max_bpm=BPM_MAX)
+    except ValueError as e:
+        raise RuntimeError("BPM detection failed: %s" % e)
+    finally:
+        os.remove(wav_path)
+

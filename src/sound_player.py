@@ -45,7 +45,8 @@ class SoundPlayer:
         # Load both song files into RAM, resampled to the device rate.
         self.songs = [_load_audio(path, rate, channels) for path in (first_song_path, second_song_path)]
 
-        self.positions = [0, 0] # Positions of songs (sample index).
+        self.positions = [0.0, 0.0] # Positions of songs (fractional sample index).
+        self.speeds = [1.0, 1.0] # Playback speed of each song (1 = original, 0 = stopped)
         self.gains = [float(first_gain), float(second_gain)] # the gain each song is playing at right now
         self.target_gains = [float(first_gain), float(second_gain)] # the gain each song should ramp to (set by set_gains)
 
@@ -66,6 +67,11 @@ class SoundPlayer:
         self._ramp = np.arange(1, BLOCK_FRAMES + 1, dtype=np.float32) / BLOCK_FRAMES # Ramp shape 1/256..1: fraction of the way from the old to the new gain, per sample.
         self._gain_buf = np.empty(BLOCK_FRAMES, dtype=np.float32)
         self._mix_buf = np.empty((BLOCK_FRAMES, channels), dtype=np.float32)
+        self._steps = np.arange(BLOCK_FRAMES, dtype=np.float64) # 0, 1, 2, ... output samples into the block
+        self._read_pos = np.empty(BLOCK_FRAMES, dtype=np.float64) # fractional song position per output sample
+        self._floor = np.empty(BLOCK_FRAMES, dtype=np.float64)
+        self._index = np.empty(BLOCK_FRAMES, dtype=np.int64)
+        self._next_buf = np.empty((BLOCK_FRAMES, channels), dtype=np.float32)
 
         self.stream = sd.OutputStream(device=device, samplerate=rate, channels=channels, dtype="float32",
                                       blocksize=BLOCK_FRAMES, latency="low", callback=self._callback)
@@ -74,6 +80,11 @@ class SoundPlayer:
         """Set the target gains; the callback ramps to them over the next block."""
         self.target_gains[0] = float(first_gain)
         self.target_gains[1] = float(second_gain)
+
+    def set_speeds(self, first_speed, second_speed):
+        """Set the playback speeds (turntable style: pitch follows speed). Applies from the next block."""
+        self.speeds[0] = max(float(first_speed), 0.0)
+        self.speeds[1] = max(float(second_speed), 0.0)
 
     def play_drum(self, index, strength, volume):
         """Play drum `index` once at `gain`. A drum that is still playing is cut off and replaced."""
@@ -98,9 +109,15 @@ class SoundPlayer:
         out.fill(0)
 
         for i, song in enumerate(self.songs):
-            pos = self.positions[i]
+            pos, speed = self.positions[i], self.speeds[i]
 
-            n = min(frames, len(song) - pos)
+            last = len(song) - 2  # k and k + 1 samples needed for linear interpolation.
+            if speed > 0:
+                n = min(frames, math.floor((last - pos) / speed) + 1)
+            else:
+                n = frames if pos <= last else 0
+
+            # Check if the song has ended.
             if n <= 0:
                 continue
 
@@ -112,14 +129,32 @@ class SoundPlayer:
             np.multiply(self._ramp[:n], g1 - g0, out=gain)
             gain += g0
 
-            # Scale this block of the song and add it to the mix.
+            # Read the song at pos, pos + speed, pos + 2·speed, ... with linear interpolation.
+            read_pos = self._read_pos[:n]
+            np.multiply(self._steps[:n], speed, out=read_pos)
+            read_pos += pos
+            floor = self._floor[:n]
+            np.floor(read_pos, out=floor)
+            index = self._index[:n]
+            index[:] = floor
+            read_pos -= floor
+
             mix = self._mix_buf[:n]
-            np.multiply(song[pos:pos + n], gain[:, None], out=mix)
+            np.take(song, index, axis=0, out=mix, mode="clip")  # song[k]
+            index += 1
+            nxt = self._next_buf[:n]
+            np.take(song, index, axis=0, out=nxt, mode="clip")  # song[k + 1]
+            nxt -= mix
+            nxt *= read_pos[:, None]
+            mix += nxt  # song[k] + fraction · (song[k + 1] - song[k])
+
+            # Scale this block of the song and add it to the mix.
+            mix *= gain[:, None]
             out[:n] += mix
 
             # Adjust the values for the next block.
             self.gains[i] = g1
-            self.positions[i] = pos + n
+            self.positions[i] = pos + n * speed
 
         # Start a requested drum from the beginning, replacing any drum that is still playing.
         request = self._drum_request

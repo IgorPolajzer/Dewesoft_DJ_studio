@@ -31,6 +31,7 @@ class DJStudioApp:
         self.drum_selection = START_DRUM
         self.encoder_mode = START_ENCODER_MODE
 
+        self.rpm = None  # latest encoder RPM in BPM mode.
         self.session = None
         self.channels = None
         self.player = None
@@ -105,17 +106,34 @@ class DJStudioApp:
                 self.player.play_drum(index, strength, (self.volume * DRUM_VOLUME_FACTOR))
 
     def _encoder(self):
-        """Encoder mode (dropdown) and encoder steps (1 forward, -1 backward, 0 nothing)."""
+        """Encoder mode (dropdown)."""
         values, _ = self.session.read(self.channels[self.config.encoder_mode_channel])
         if len(values):
-            self.encoder_mode = EncoderMode(int(round(values[-1])))
+            new_mode = EncoderMode(int(round(values[-1])))
+
+            # Leaving BPM mode: songs go back to their original speed.
+            if self.encoder_mode == EncoderMode.BPM and new_mode != EncoderMode.BPM:
+                self.rpm = None
+
+                if self.player:
+                    self.player.set_speeds(1.0, 1.0)
+
+            self.encoder_mode = new_mode
 
         values, _ = self.session.read(self.channels[self.config.encoder_channel])
         match self.encoder_mode:
+            # NOTE: encoder steps (1 forward, -1 backward, 0 nothing).
             case EncoderMode.NOTE:
                 for value in values:
-                    if value != 0 and self.player:
-                        self.player.play_note(int(round(value)))
+                    if value in (1, -1) and self.player:
+                        self.player.play_note(int(value))
 
+            # BPM: encoder RPM.
             case EncoderMode.BPM:
-                pass
+                # Master BPM = encoder RPM.
+                if len(values) and values[-1] != self.rpm:
+                    self.rpm = values[-1]
+
+                    if self.player:
+                        self.player.set_speeds(self.rpm / self.config.first_song["bpm"],
+                                               self.rpm / self.config.second_song["bpm"])

@@ -1,4 +1,5 @@
 import sys
+from time import sleep
 
 from src.config import Config
 from src.utils import EXIT_NOT_OK, EXIT_OK
@@ -33,4 +34,6 @@ def main(args):
 
 
 if "__main__" == __name__:
-    sys.exit(main(sys.argv[1:]))
+    val = main(sys.argv[1:])
+    sleep(10)
+    sys.exit(val)
