@@ -20,6 +20,9 @@ DRUM_STRENGTH_MAX = 10.0  # Drum hit strength 1-10.
 NOTE_DIR = os.path.join(PROJECT_ROOT, "assets", "note")
 NOTE_FILES = {1: "forward_note.wav", -1: "backwards_note.wav"}
 
+# Tuning fork stream buffer.
+FORK_LATENCY_S = 0.1
+
 
 def mix_gains(mixer, volume):
     """Song gains (gA, gB) from the raw slider values (0..100).
@@ -116,13 +119,17 @@ class SoundPlayer:
     def open_fork(self, sample_rate):
         """Open and start the tuning fork stream at the channel's own rate (WASAPI converts it to the device rate)."""
         self.fork_stream = sd.OutputStream(device=self._device, samplerate=sample_rate, channels=1, dtype="float32",
-                                           extra_settings=sd.WasapiSettings(auto_convert=True))
+                                           latency=FORK_LATENCY_S, extra_settings=sd.WasapiSettings(auto_convert=True))
         self.fork_stream.start()
 
     def play_fork(self, samples):
-        """Main thread: queue tuning fork samples for playback (blocks briefly when the stream's buffer is full)."""
-        if len(samples) and self.fork_stream is not None:
-            self.fork_stream.write((samples * self._fork_gain).astype(np.float32))
+        """Main thread: queue tuning fork samples for playback."""
+        if self.fork_stream is None:
+            return
+
+        free = self.fork_stream.write_available
+        if len(samples) and free:
+            self.fork_stream.write((samples[-free:] * self._fork_gain).astype(np.float32))
 
     def start(self):
         self.stream.start()

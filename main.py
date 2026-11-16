@@ -3,15 +3,17 @@ from time import sleep
 
 from src.app import DJStudioApp
 from src.config import Config
+from src.dcom_util import DcomUtil
 from src.utils.dsremote_util import NET_CMD_PORT, NET_DATA_PORT, NET_HOST
 from src.utils.util import EXIT_NOT_OK
 
 
 if "__main__" == __name__:
     try:
+        dcom = DcomUtil()
         config = Config()
         config.read()
-        exit_code = DJStudioApp(config, NET_HOST, NET_CMD_PORT, NET_DATA_PORT).run()
+        exit_code = DJStudioApp(config, NET_HOST, NET_CMD_PORT, NET_DATA_PORT, dcom).run()
     except KeyboardInterrupt:
         print("\nInterrupted during setup.", file=sys.stderr)
         exit_code = EXIT_NOT_OK

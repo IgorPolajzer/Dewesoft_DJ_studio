@@ -6,7 +6,8 @@
     "drum_channel": "Drum trigger",
     "encoder_mode_channel": "Encoder_mode",
     "encoder_channel": "Encoder output",
-    "tuning_fork_channel": "Tuning fork",
+    "tuning_fork_channel": "TuningFork/Filter,Tuning_fork_range/Tuning fork",
+    "freeze_channel": "Freeze",
     "first_song": {
         "path": "C:\\Users\\igor.polajzer\\Desktop\\Dewesoft\\projects\\First_project\\Signal_to_sound_converter\\assets\\songs\\Luke_Bergs_Aurora.mp3",
         "sample_rate": 44100,

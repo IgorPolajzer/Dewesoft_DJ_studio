@@ -19,17 +19,20 @@ START_ENCODER_MODE = EncoderMode.NOTE
 
 
 class DJStudioApp:
-    def __init__(self, config, host, cmd_port, data_port):
+    def __init__(self, config, host, cmd_port, data_port, dcom):
         self.config = config
         self.host = host
         self.cmd_port = cmd_port
         self.data_port = data_port
+        self.dcom = dcom
 
         # Control values.
         self.mixer = START_MIXER
         self.volume = START_VOLUME
         self.drum_selection = START_DRUM
         self.encoder_mode = START_ENCODER_MODE
+        self.frozen = False
+        self.last_freeze = 0.0
 
         self.rpm = None  # latest encoder RPM in BPM mode.
         self.session = None
@@ -52,12 +55,17 @@ class DJStudioApp:
                     self.config.encoder_mode_channel,
                     self.config.encoder_channel,
                     self.config.tuning_fork_channel,
+                    self.config.freeze_channel,
                 ])
+
                 session.start(BUFFER_SAMPLES)
 
                 if self.player:
+                    self.dcom.switch_screen("Measure", "Track overview")
                     self.player.start()
                     self.player.open_fork(self.channels[self.config.tuning_fork_channel].rate)
+
+                # TODO Play synchronisation click.
 
                 while True:
                     try:
@@ -66,6 +74,7 @@ class DJStudioApp:
                         self._drums()
                         self._encoder()
                         self._tuning_fork()
+                        self._freeze()
                     except KeyboardInterrupt:
                         break
 
@@ -74,6 +83,17 @@ class DJStudioApp:
                 self.player.stop()
 
         return EXIT_OK
+
+    def _freeze(self):
+        """Freeze button: every press (first 1 after a 0) toggles the screen freeze; the following 0s are ignored."""
+        values, _ = self.session.read(self.channels[self.config.freeze_channel])
+
+        for value in values:
+            if value == 1 and self.last_freeze != 1:
+                self.frozen = not self.frozen
+                self.dcom.freeze_screen(self.frozen)
+
+            self.last_freeze = value
 
     def _music(self):
         """Mixer and volume sliders -> song gains."""
@@ -106,7 +126,7 @@ class DJStudioApp:
 
             index = int(round(self.drum_selection))
             if self.player and 0 <= index < len(self.player.drums):
-                print(f"Drum hit (strength level: {strength}).")
+                # print(f"Drum hit (strength level: {strength}).")
                 self.player.play_drum(index, strength, (self.volume * DRUM_VOLUME_FACTOR))
 
     def _encoder(self):
@@ -145,5 +165,6 @@ class DJStudioApp:
     def _tuning_fork(self):
         """Tuning fork channel streamed to the speaker."""
         values, _ = self.session.read(self.channels[self.config.tuning_fork_channel])
+
         if self.player:
             self.player.play_fork(values)
