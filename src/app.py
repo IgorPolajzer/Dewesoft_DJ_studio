@@ -65,8 +65,6 @@ class DJStudioApp:
                     self.player.start()
                     self.player.open_fork(self.channels[self.config.tuning_fork_channel].rate)
 
-                # TODO Play synchronisation click.
-
                 while True:
                     try:
                         time.sleep(POLL_INTERVAL_S)

@@ -20,6 +20,9 @@ DRUM_STRENGTH_MAX = 10.0  # Drum hit strength 1-10.
 NOTE_DIR = os.path.join(PROJECT_ROOT, "assets", "note")
 NOTE_FILES = {1: "forward_note.wav", -1: "backwards_note.wav"}
 
+# Sync click. detected on Master by the C++ songs script.
+CLICK_SAMPLES = 48
+
 # Tuning fork stream buffer.
 FORK_LATENCY_S = 0.1
 
@@ -72,6 +75,8 @@ class SoundPlayer:
         self._note = None
         self._note_pos = 0
         self._note_request = None
+
+        self._click_pending = True  # sync click, played once at the start of the first block
 
         # Tuning fork: its own stream at the channel rate, opened by open_fork().
         self.fork_stream = None
@@ -228,6 +233,11 @@ class SoundPlayer:
             self._note_pos = pos + n
             if self._note_pos >= len(note):
                 self._note = None
+
+        # Sync click on the first block (overrides the song start for ~1 ms).
+        if self._click_pending:
+            self._click_pending = False
+            out[:CLICK_SAMPLES] = 1.0
 
 
 def _find_wasapi_output():
