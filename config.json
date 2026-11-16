@@ -6,16 +6,16 @@
     "drum_channel": "Drum trigger",
     "encoder_mode_channel": "Encoder_mode",
     "encoder_channel": "Encoder output",
-    "tuning_fork_channel": "TuningFork/Filter,Tuning_fork_range/Tuning fork",
+    "tuning_fork_channel": "Tuning fork",
     "freeze_channel": "Freeze",
     "first_song": {
-        "path": "C:\\Users\\igor.polajzer\\Desktop\\Dewesoft\\projects\\First_project\\Signal_to_sound_converter\\assets\\songs\\Luke_Bergs_Aurora.mp3",
+        "path": "C:\\Users\\igor.polajzer\\Desktop\\Dewesoft\\projects\\First_project\\Signal_to_sound_converter\\assets\\songs\\house_one.mp3",
         "sample_rate": 44100,
-        "bpm": 129.2
+        "bpm": 123.05
     },
     "second_song": {
-        "path": "C:\\Users\\igor.polajzer\\Desktop\\Dewesoft\\projects\\First_project\\Signal_to_sound_converter\\assets\\songs\\Spiring_Late_Night.mp3",
-        "sample_rate": 44100,
-        "bpm": 99.38
+        "path": "C:\\Users\\igor.polajzer\\Desktop\\Dewesoft\\projects\\First_project\\Signal_to_sound_converter\\assets\\songs\\house_two.mp3",
+        "sample_rate": 48000,
+        "bpm": 156.25
     }
 }

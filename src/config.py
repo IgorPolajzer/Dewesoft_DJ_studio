@@ -15,7 +15,7 @@ DRUM_SELECTION_CHANNEL = "Drum_selection"
 DRUM_CHANNEL = "Drum trigger"
 ENCODER_MODE_CHANNEL = "Encoder_mode"
 ENCODER_CHANNEL = "Encoder output"
-TUNING_FORK_CHANNEL = "TuningFork/Filter,Tuning_fork_range/Tuning fork"
+TUNING_FORK_CHANNEL = "Tuning fork"
 FREEZE_CHANNEL = "Freeze"
 
 # Song sample files read by the C++ Scripts.

@@ -13,7 +13,8 @@ POLL_INTERVAL_S = 0.005 # 5ms.
 START_MIXER = 0.0
 START_VOLUME = 100.0
 START_DRUM = 0.0
-DRUM_VOLUME_FACTOR = 1.5
+DRUM_VOLUME_FACTOR = 0.75
+NOTE_VOLUME_FACTOR = 0.5
 
 START_ENCODER_MODE = EncoderMode.NOTE
 
@@ -148,7 +149,7 @@ class DJStudioApp:
             case EncoderMode.NOTE:
                 for value in values:
                     if value in (1, -1) and self.player:
-                        self.player.play_note(int(value))
+                        self.player.play_note(int(value), self.volume * NOTE_VOLUME_FACTOR)
 
             # BPM: encoder RPM.
             case EncoderMode.BPM:

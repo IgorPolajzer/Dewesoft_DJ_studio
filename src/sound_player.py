@@ -74,6 +74,7 @@ class SoundPlayer:
         self.notes = {k: _load_audio(os.path.join(NOTE_DIR, f), rate, channels) for k, f in NOTE_FILES.items()}
         self._note = None
         self._note_pos = 0
+        self._note_gain = 0.0
         self._note_request = None
 
         self._click_pending = True  # sync click, played once at the start of the first block
@@ -113,9 +114,9 @@ class SoundPlayer:
 
         self._drum_request = (index, float(gain))
 
-    def play_note(self, direction):
-        """Play the forward (1) or backward (-1) note once. A note that is still playing is cut off and replaced."""
-        self._note_request = direction
+    def play_note(self, direction, volume):
+        """Play the forward (1) or backward (-1) note once at gain v². A note that is still playing is cut off and replaced."""
+        self._note_request = (direction, volume_gain(volume))
 
     def set_fork_gain(self, gain):
         """Gain of the tuning fork stream (values are played as they come, so ranges above 1 are louder)."""
@@ -221,14 +222,17 @@ class SoundPlayer:
         request = self._note_request
         if request is not None:
             self._note_request = None
-            self._note = self.notes[request]
+            self._note = self.notes[request[0]]
+            self._note_gain = request[1]
             self._note_pos = 0
 
         # Mix the playing note on top.
         if self._note is not None:
             note, pos = self._note, self._note_pos
             n = min(frames, len(note) - pos)
-            out[:n] += note[pos:pos + n]
+            mix = self._mix_buf[:n]
+            np.multiply(note[pos:pos + n], self._note_gain, out=mix)
+            out[:n] += mix
 
             self._note_pos = pos + n
             if self._note_pos >= len(note):
@@ -237,7 +241,7 @@ class SoundPlayer:
         # Sync click on the first block (overrides the song start for ~1 ms).
         if self._click_pending:
             self._click_pending = False
-            out[:CLICK_SAMPLES] = 1.0
+            out[:CLICK_SAMPLES] = 100.0
 
 
 def _find_wasapi_output():
