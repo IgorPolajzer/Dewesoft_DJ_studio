@@ -38,12 +38,20 @@ def mix_gains(mixer, volume):
     return level * math.cos(x * math.pi / 2), level * math.sin(x * math.pi / 2)
 
 
+def volume_gain(volume):
+    """Gain v² from the raw volume slider value (0..100), as used for the songs."""
+    v = min(max(volume / SLIDER_MAX, 0.0), 1.0)
+    return v * v
+
+
 class SoundPlayer:
     def __init__(self, first_song_path, second_song_path, first_gain, second_gain):
         device, rate, channels = _find_wasapi_output()
+        self._device = device
 
-        # Load both song files into RAM, resampled to the device rate.
-        self.songs = [_load_audio(path, rate, channels) for path in (first_song_path, second_song_path)]
+        # Load both song files into RAM, resampled to the device rate).
+        paths = (first_song_path, second_song_path)
+        self.songs = [_load_audio(path, rate, channels) for path in paths] if None not in paths else []
 
         self.positions = [0.0, 0.0] # Positions of songs (fractional sample index).
         self.speeds = [1.0, 1.0] # Playback speed of each song (1 = original, 0 = stopped)
@@ -62,6 +70,10 @@ class SoundPlayer:
         self._note = None
         self._note_pos = 0
         self._note_request = None
+
+        # Tuning fork: its own stream at the channel rate, opened by open_fork().
+        self.fork_stream = None
+        self._fork_gain = 1.0
 
         # Preallocated buffers for the callback.
         self._ramp = np.arange(1, BLOCK_FRAMES + 1, dtype=np.float32) / BLOCK_FRAMES # Ramp shape 1/256..1: fraction of the way from the old to the new gain, per sample.
@@ -98,12 +110,30 @@ class SoundPlayer:
         """Play the forward (1) or backward (-1) note once. A note that is still playing is cut off and replaced."""
         self._note_request = direction
 
+    def set_fork_gain(self, gain):
+        """Gain of the tuning fork stream (values are played as they come, so ranges above 1 are louder)."""
+        self._fork_gain = float(gain)
+
+    def open_fork(self, sample_rate):
+        """Open and start the tuning fork stream at the channel's own rate (WASAPI converts it to the device rate)."""
+        self.fork_stream = sd.OutputStream(device=self._device, samplerate=sample_rate, channels=1, dtype="float32",
+                                           extra_settings=sd.WasapiSettings(auto_convert=True))
+        self.fork_stream.start()
+
+    def play_fork(self, samples):
+        """Main thread: queue tuning fork samples for playback (blocks briefly when the stream's buffer is full)."""
+        if len(samples) and self.fork_stream is not None:
+            self.fork_stream.write((samples * self._fork_gain).astype(np.float32))
+
     def start(self):
         self.stream.start()
 
     def stop(self):
         self.stream.stop()
         self.stream.close()
+        if self.fork_stream is not None:
+            self.fork_stream.stop()
+            self.fork_stream.close()
 
     def _callback(self, out, frames, time_info, status):
         out.fill(0)

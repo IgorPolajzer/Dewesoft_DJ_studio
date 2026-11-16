@@ -2,7 +2,7 @@ import time
 
 from src.dsremote import DSRemoteSession
 from src.encoder_mode import EncoderMode
-from src.sound_player import SoundPlayer, mix_gains
+from src.sound_player import SoundPlayer, mix_gains, volume_gain
 from src.utils.util import EXIT_OK
 
 # DSRemote ring buffer per channel, in samples. The sliders send at most 100 values/s, so any size
@@ -37,9 +37,13 @@ class DJStudioApp:
         self.player = None
 
     def run(self):
+        songs = (None, None)
+
         if self.config.mode == "music_mix":
-            self.player = SoundPlayer(self.config.first_song["path"], self.config.second_song["path"],
-                                      *mix_gains(self.mixer, self.volume))
+            songs = (self.config.first_song["path"], self.config.second_song["path"])
+
+        self.player = SoundPlayer(*songs, *mix_gains(self.mixer, self.volume))
+        self.player.set_fork_gain(volume_gain(self.volume))
 
         try:
             with DSRemoteSession(self.host, self.cmd_port, self.data_port) as session:
@@ -51,11 +55,13 @@ class DJStudioApp:
                     self.config.drum_channel,
                     self.config.encoder_mode_channel,
                     self.config.encoder_channel,
+                    self.config.tuning_fork_channel,
                 ])
                 session.start(BUFFER_SAMPLES)
 
                 if self.player:
                     self.player.start()
+                    self.player.open_fork(self.channels[self.config.tuning_fork_channel].rate)
 
                 while True:
                     try:
@@ -63,6 +69,7 @@ class DJStudioApp:
                         self._music()
                         self._drums()
                         self._encoder()
+                        self._tuning_fork()
                     except KeyboardInterrupt:
                         break
 
@@ -88,6 +95,7 @@ class DJStudioApp:
             self.mixer, self.volume = new_mixer, new_volume
             if self.player:
                 self.player.set_gains(*mix_gains(self.mixer, self.volume))
+                self.player.set_fork_gain(volume_gain(self.volume))
 
     def _drums(self):
         """Drum selection (dropdown 0-3) and drum hits (strengths 1-10)."""
@@ -134,6 +142,12 @@ class DJStudioApp:
                 if len(values) and values[-1] != self.rpm:
                     self.rpm = values[-1]
 
-                    if self.player:
+                    if self.player and self.player.songs:
                         self.player.set_speeds(self.rpm / self.config.first_song["bpm"],
                                                self.rpm / self.config.second_song["bpm"])
+
+    def _tuning_fork(self):
+        """Tuning fork channel streamed to the speaker."""
+        values, _ = self.session.read(self.channels[self.config.tuning_fork_channel])
+        if self.player:
+            self.player.play_fork(values)

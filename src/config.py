@@ -15,6 +15,7 @@ DRUM_SELECTION_CHANNEL = "Drum_selection"
 DRUM_CHANNEL = "Drum trigger"
 ENCODER_MODE_CHANNEL = "Encoder_mode"
 ENCODER_CHANNEL = "Encoder output"
+TUNING_FORK_CHANNEL = "Tuning fork"
 
 # Song sample files read by the C++ Scripts.
 SONG_DIR = os.path.join(PROJECT_ROOT, "song_files")
@@ -36,6 +37,7 @@ class Config:
         self.drum_channel = None
         self.encoder_mode_channel = None
         self.encoder_channel = None
+        self.tuning_fork_channel = None
         self.first_song = None
         self.second_song = None
 
@@ -57,6 +59,7 @@ class Config:
             self.drum_channel = data["drum_channel"]
             self.encoder_mode_channel = data["encoder_mode_channel"]
             self.encoder_channel = data["encoder_channel"]
+            self.tuning_fork_channel = data["tuning_fork_channel"]
             self.first_song = data["first_song"]
             self.second_song = data["second_song"]
         except KeyError as e:
@@ -97,6 +100,7 @@ class Config:
         self.drum_channel = DRUM_CHANNEL
         self.encoder_mode_channel = ENCODER_MODE_CHANNEL
         self.encoder_channel = ENCODER_CHANNEL
+        self.tuning_fork_channel = TUNING_FORK_CHANNEL
         self.first_song = {"path": paths[0], "sample_rate": rates[0], "bpm": bpms[0]}
         self.second_song = {"path": paths[1], "sample_rate": rates[1], "bpm": bpms[1]}
         return self
@@ -111,6 +115,7 @@ class Config:
             "drum_channel": self.drum_channel,
             "encoder_mode_channel": self.encoder_mode_channel,
             "encoder_channel": self.encoder_channel,
+            "tuning_fork_channel": self.tuning_fork_channel,
             "first_song": self.first_song,
             "second_song": self.second_song,
         }
