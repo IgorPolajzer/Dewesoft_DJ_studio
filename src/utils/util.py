@@ -9,4 +9,3 @@ EXIT_NOT_OK = 1
 
 # Application config.
 CONFIG_PATH = os.path.join(PROJECT_ROOT, "config.json")
-MODES = ("music_mix", "natural_sounds")

@@ -5,7 +5,7 @@ import numpy as np
 import soundfile as sf
 from bpm_finder import analyze_audio_file
 
-from src.utils.util import CONFIG_PATH, MODES, PROJECT_ROOT
+from src.utils.util import CONFIG_PATH, PROJECT_ROOT
 
 # Fixed DewesoftX channel names.
 MASTER_CHANNEL = "Master"
@@ -29,7 +29,6 @@ BPM_MAX = 180.0
 class Config:
     def __init__(self, path=CONFIG_PATH):
         self.path = path
-        self.mode = None
         self.master_channel = None
         self.mixer_slider_channel = None
         self.volume_slider_channel = None
@@ -51,7 +50,6 @@ class Config:
             raise RuntimeError("%s is not valid JSON (%s)." % (self.path, e))
 
         try:
-            self.mode = data["mode"]
             self.master_channel = data["master_channel"]
             self.mixer_slider_channel = data["mixer_slider_channel"]
             self.volume_slider_channel = data["volume_slider_channel"]
@@ -65,34 +63,26 @@ class Config:
         except KeyError as e:
             raise RuntimeError("%s is missing the key %s. Run write_config.py again." % (self.path, e))
 
-        if self.mode not in MODES:
-            raise RuntimeError("%s: mode %r must be one of: %s" % (self.path, self.mode, ", ".join(MODES)))
         return self
 
-    def update(self, mode, first_song_path=None, second_song_path=None):
-        if mode not in MODES:
-            raise RuntimeError("Application mode must be one of: %s" % ", ".join(MODES))
-
+    def update(self, first_song_path, second_song_path):
         paths = []
         for path in (first_song_path, second_song_path):
-            if path is not None:
-                path = os.path.abspath(path)
-                if not os.path.isfile(path):
-                    raise RuntimeError("File not found: %s" % path)
+            if not path:
+                raise RuntimeError("Both songs are required.")
+            path = os.path.abspath(path)
+            if not os.path.isfile(path):
+                raise RuntimeError("File not found: %s" % path)
             paths.append(path)
 
         rates = [None, None]
         bpms = [None, None]
-        if mode == "music_mix":
-            if None in paths:
-                raise RuntimeError("music_mix needs both songs.")
-            for i, (src, dst) in enumerate(zip(paths, SONG_FILES)):
-                try:
-                    rates[i], bpms[i] = _save_song_samples(src, dst)
-                except (OSError, RuntimeError) as e:  # soundfile raises LibsndfileError (RuntimeError)
-                    raise RuntimeError("Could not convert %s: %s" % (src, e))
+        for i, (src, dst) in enumerate(zip(paths, SONG_FILES)):
+            try:
+                rates[i], bpms[i] = _save_song_samples(src, dst)
+            except (OSError, RuntimeError) as e:  # soundfile raises LibsndfileError (RuntimeError)
+                raise RuntimeError("Could not convert %s: %s" % (src, e))
 
-        self.mode = mode
         self.master_channel = MASTER_CHANNEL
         self.mixer_slider_channel = MIXER_SLIDER_CHANNEL
         self.volume_slider_channel = VOLUME_SLIDER_CHANNEL
@@ -107,7 +97,6 @@ class Config:
 
     def write(self):
         state = {
-            "mode": self.mode,
             "master_channel": self.master_channel,
             "mixer_slider_channel": self.mixer_slider_channel,
             "volume_slider_channel": self.volume_slider_channel,

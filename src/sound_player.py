@@ -49,9 +49,8 @@ class SoundPlayer:
         device, rate, channels = _find_wasapi_output()
         self._device = device
 
-        # Load both song files into RAM, resampled to the device rate).
-        paths = (first_song_path, second_song_path)
-        self.songs = [_load_audio(path, rate, channels) for path in paths] if None not in paths else []
+        # Load both song files into RAM, resampled to the device rate.
+        self.songs = [_load_audio(path, rate, channels) for path in (first_song_path, second_song_path)]
 
         self.positions = [0.0, 0.0] # Positions of songs (fractional sample index).
         self.speeds = [1.0, 1.0] # Playback speed of each song (1 = original, 0 = stopped)

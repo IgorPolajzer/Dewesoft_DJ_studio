@@ -37,12 +37,8 @@ class DJStudioApp:
         self.player = None
 
     def run(self):
-        songs = (None, None)
-
-        if self.config.mode == "music_mix":
-            songs = (self.config.first_song["path"], self.config.second_song["path"])
-
-        self.player = SoundPlayer(*songs, *mix_gains(self.mixer, self.volume))
+        self.player = SoundPlayer(self.config.first_song["path"], self.config.second_song["path"],
+                                  *mix_gains(self.mixer, self.volume))
         self.player.set_fork_gain(volume_gain(self.volume))
 
         try:
@@ -142,7 +138,7 @@ class DJStudioApp:
                 if len(values) and values[-1] != self.rpm:
                     self.rpm = values[-1]
 
-                    if self.player and self.player.songs:
+                    if self.player:
                         self.player.set_speeds(self.rpm / self.config.first_song["bpm"],
                                                self.rpm / self.config.second_song["bpm"])
 
