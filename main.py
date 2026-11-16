@@ -19,6 +19,5 @@ if "__main__" == __name__:
         print("ERROR: %s" % e, file=sys.stderr)
         exit_code = EXIT_NOT_OK
 
-
     # sleep(10)
     sys.exit(exit_code)
