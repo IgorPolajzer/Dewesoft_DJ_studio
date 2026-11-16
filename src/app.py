@@ -18,6 +18,9 @@ NOTE_VOLUME_FACTOR = 0.5
 
 START_ENCODER_MODE = EncoderMode.NOTE
 
+# DewesoftX data file (DCOM storing), timestamped so no file is ever overwritten.
+STORE_FILE_FORMAT = "dj_studio_%Y%m%d_%H%M%S.dxd"
+
 
 class DJStudioApp:
     def __init__(self, config, host, cmd_port, data_port, dcom):
@@ -60,6 +63,9 @@ class DJStudioApp:
                 ])
 
                 session.start(BUFFER_SAMPLES)
+
+                # Store before the player starts, so the sync click on Master is in the file.
+                self.dcom.start_storing(time.strftime(STORE_FILE_FORMAT))
 
                 if self.player:
                     self.dcom.switch_screen("Measure", "Track overview")

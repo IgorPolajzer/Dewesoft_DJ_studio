@@ -15,3 +15,9 @@ class DcomUtil:
 
     def freeze_screen(self, freeze):
         self.app.SetFreezeMode(freeze)
+
+    def start_storing(self, file_name):
+        """Start writing the running measurement to `file_name` (a bare name lands in the DewesoftX data directory)."""
+        if not self.app.Acquiring:
+            raise RuntimeError("DewesoftX is not acquiring, cannot start storing.")
+        self.app.StartStoring(file_name)
