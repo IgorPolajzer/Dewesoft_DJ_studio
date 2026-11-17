@@ -69,7 +69,8 @@ class SoundPlayer:
         self._mix_buf = np.empty((BLOCK_FRAMES, channels), dtype=np.float32)
         self._steps = np.arange(BLOCK_FRAMES, dtype=np.float64) # 0, 1, 2, ... output samples into the block
         self._read_pos = np.empty(BLOCK_FRAMES, dtype=np.float64) # fractional song position per output sample
-        self._floor = np.empty(BLOCK_FRAMES, dtype=np.float64)
+        self._whole = np.empty(BLOCK_FRAMES, dtype=np.float64)    # floor (read position)
+        self._fraction = np.empty(BLOCK_FRAMES, dtype=np.float64) # read position - floor, 0..1
         self._index = np.empty(BLOCK_FRAMES, dtype=np.int64)
         self._next_buf = np.empty((BLOCK_FRAMES, channels), dtype=np.float32)
 
@@ -121,8 +122,11 @@ class SoundPlayer:
         self.stream.start()
 
     def stop(self):
+        # Song stream.
         self.stream.stop()
         self.stream.close()
+
+        # Tuning fork stream.
         if self.fork_stream is not None:
             self.fork_stream.stop()
             self.fork_stream.close()
@@ -130,57 +134,88 @@ class SoundPlayer:
     def _callback(self, out, frames, time_info, status):
         out.fill(0)
 
-        # Song processing.
-        for i, song in enumerate(self.songs):
-            pos, speed = self.song_positions[i], self.song_speeds[i]
+        for i in range(len(self.songs)):
+            self._mix_song(i, out, frames)
 
-            # k and k + 1 samples needed for linear interpolation.
-            last = len(song) - 2
-            if speed > 0:
-                n = min(frames, math.floor((last - pos) / speed) + 1)
-            else:
-                n = frames if pos <= last else 0
+        self._mix_drum(out, frames)
+        self._mix_note(out, frames)
 
-            # Check if the song has ended.
-            if n <= 0:
-                continue
+        # Overwrites the mix.
+        self._write_sync_click(out)
 
-            # Linear gain ramp from the previous gain to the target over this block.
-            g0, g1 = self.song_gains[i], self.song_target_gains[i] # where we are, where we want to be
+    def _mix_song(self, i, out, frames):
+        """Add the next block of song i: read at its speed, interpolated, with a gain ramp."""
+        song, pos, speed = self.songs[i], self.song_positions[i], self.song_speeds[i]
 
-            # Compute the gain.
-            gain = self._gain_buf[:n]
-            np.multiply(self._ramp[:n], g1 - g0, out=gain)
-            gain += g0
+        n = _readable_samples(len(song), pos, speed, frames)
+        if n == 0:
+            return  # the song has ended
 
-            # Read the song at pos, pos + speed, pos + 2·speed, ... with linear interpolation.
-            read_pos = self._read_pos[:n]
-            np.multiply(self._steps[:n], speed, out=read_pos)
-            read_pos += pos
-            floor = self._floor[:n]
-            np.floor(read_pos, out=floor)
-            index = self._index[:n]
-            index[:] = floor
-            read_pos -= floor
+        start_gain, end_gain = self.song_gains[i], self.song_target_gains[i]
 
-            mix = self._mix_buf[:n]
-            np.take(song, index, axis=0, out=mix, mode="clip")  # song[k]
-            index += 1
-            nxt = self._next_buf[:n]
-            np.take(song, index, axis=0, out=nxt, mode="clip")  # song[k + 1]
-            nxt -= mix
-            nxt *= read_pos[:, None]
-            mix += nxt  # song[k] + fraction · (song[k + 1] - song[k])
+        samples = self._read_interpolated(song, pos, speed, n)
+        samples *= self._gain_ramp(start_gain, end_gain, n)[:, None]  # same gain for every channel
+        out[:n] += samples
 
-            # Scale this block of the song and add it to the mix.
-            mix *= gain[:, None]
-            out[:n] += mix
+        # The next block continues where this one stopped.
+        self.song_gains[i] = end_gain
+        self.song_positions[i] = pos + n * speed
 
-            # Adjust the values for the next block.
-            self.song_gains[i] = g1
-            self.song_positions[i] = pos + n * speed
+    def _read_interpolated(self, song, pos, speed, n):
+        """n song samples at pos, pos + speed, pos + 2·speed, ... (between two stored samples: linear interpolation).
 
-        # Start a requested drum. Eeplacing any drum that is still playing.
+        value = song[k] + fraction · (song[k + 1] - song[k]),  with k + fraction = read position.
+        Returns a view of a preallocated buffer, valid until the next call.
+        """
+
+        # read position = pos + j · speed  (j = 0, 1, 2, ... output sample in the block)
+        read_pos = self._read_pos[:n]
+        np.multiply(self._steps[:n], speed, out=read_pos)
+        read_pos += pos
+
+        # k = floor(read position)
+        whole = self._whole[:n]
+        np.floor(read_pos, out=whole)
+
+        # fraction = read position - k
+        fraction = self._fraction[:n]
+        np.subtract(read_pos, whole, out=fraction)
+
+        # song[k]
+        k = self._index[:n]
+        k[:] = whole
+        current_sample = self._mix_buf[:n]
+        np.take(song, k, axis=0, out=current_sample, mode="clip")
+
+        # song[k + 1]
+        k += 1
+        following_sample = self._next_buf[:n]
+        np.take(song, k, axis=0, out=following_sample, mode="clip")
+
+        # song[k] + fraction · (song[k + 1] - song[k])
+        difference = following_sample
+        difference -= current_sample
+        difference *= fraction[:, None]
+        current_sample += difference
+
+        return current_sample
+
+    def _gain_ramp(self, start_gain, end_gain, n):
+        """Per-sample gain sliding linearly from start_gain to end_gain over the block (no clicks on changes).
+
+        gain[j] = start_gain + ramp[j] · (end_gain - start_gain),  ramp[j] = (j + 1) / 256  (1/256 .. 1)
+        """
+        # ramp[j] · (end_gain - start_gain)
+        gain = self._gain_buf[:n]
+        np.multiply(self._ramp[:n], end_gain - start_gain, out=gain)
+
+        # start_gain + ramp[j] · (end_gain - start_gain)
+        gain += start_gain
+
+        return gain
+
+    def _mix_drum(self, out, frames):
+        """Start a requested drum (replacing one that is still playing), then add its next block."""
         request = self._drum_request
         if request is not None:
             self._drum_request = None
@@ -188,19 +223,13 @@ class SoundPlayer:
             self._drum_gain = request[1]
             self._drum_pos = 0
 
-        # Mix the drum on top of the songs.
         if self._drum is not None:
-            drum, pos = self._drum, self._drum_pos
-            n = min(frames, len(drum) - pos)
-            mix = self._mix_buf[:n]
-            np.multiply(drum[pos:pos + n], self._drum_gain, out=mix)
-            out[:n] += mix
-
-            self._drum_pos = pos + n
-            if self._drum_pos >= len(drum):
+            self._drum_pos = self._mix_one_shot(self._drum, self._drum_pos, self._drum_gain, out, frames)
+            if self._drum_pos >= len(self._drum):
                 self._drum = None
 
-        # Start a requested note, replacing any note that is still playing.
+    def _mix_note(self, out, frames):
+        """Start a requested note (replacing one that is still playing), then add its next block."""
         request = self._note_request
         if request is not None:
             self._note_request = None
@@ -208,22 +237,50 @@ class SoundPlayer:
             self._note_gain = request[1]
             self._note_pos = 0
 
-        # Mix the note on top of the songs.
         if self._note is not None:
-            note, pos = self._note, self._note_pos
-            n = min(frames, len(note) - pos)
-            mix = self._mix_buf[:n]
-            np.multiply(note[pos:pos + n], self._note_gain, out=mix)
-            out[:n] += mix
-
-            self._note_pos = pos + n
-            if self._note_pos >= len(note):
+            self._note_pos = self._mix_one_shot(self._note, self._note_pos, self._note_gain, out, frames)
+            if self._note_pos >= len(self._note):
                 self._note = None
 
-        # Sync click on the first block.
+    def _mix_one_shot(self, sound, pos, gain, out, frames):
+        """Add the next block of a sound that plays once (drum, note) at a constant gain. Returns the new position.
+
+        out[j] += gain · sound[pos + j],  j = 0 .. n - 1
+        """
+        # n = samples left in this block (fewer at the end of the sound)
+        n = min(frames, len(sound) - pos)
+
+        # gain · sound[pos + j]
+        samples = self._mix_buf[:n]
+        np.multiply(sound[pos:pos + n], gain, out=samples)
+
+        # out[j] += gain · sound[pos + j]
+        out[:n] += samples
+
+        # next block continues at pos + n
+        return pos + n
+
+    def _write_sync_click(self, out):
+        """First block only: the sync click that the C++ songs script detects on Master."""
         if self._click_pending:
             self._click_pending = False
             out[:CLICK_SAMPLES] = 100.0
+
+
+def _readable_samples(song_length, pos, speed, frames):
+    """How many output samples of this block can still be read from the song.
+
+    Interpolation reads song[k] and song[k + 1].
+    """
+    last = song_length - 2
+
+    if pos > last:
+        return 0
+
+    if speed == 0:
+        return frames  # stopped turntable: keeps playing the current position
+
+    return min(frames, math.floor((last - pos) / speed) + 1)
 
 
 def normalise(value, maximum):
