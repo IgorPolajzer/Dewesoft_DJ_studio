@@ -1,19 +1,17 @@
 import ctypes
 import sys
-import time
 from ctypes import *
 from dataclasses import dataclass, field
 
 import numpy as np
 
 from src.ds_remote_constants import (
-    DSX_CH_SYNC,
     DSX_CONNECTION_TYPE_NET,
     DSX_NET_BUFFER_OVERWRITTEN,
     DSX_TOO_MANY_SAMPLES_AVAILABLE,
     rc_name,
 )
-from src.utils.dsremote_util import DLL_PATH, GAP_FACTOR, DSRemoteError, check, check_net_server, load_dll
+from src.utils.dsremote_util import DLL_PATH, DSRemoteError, check, check_net_server, load_dll
 
 
 @dataclass
@@ -24,13 +22,8 @@ class Channel:
     unit: str
     ch_type: int
     is_control: bool
-    data: object = None  # c_double array
-    stamps: object = None
     values_np: np.ndarray = field(default=None, repr=False)
     stamps_np: np.ndarray = field(default=None, repr=False)
-    overruns: int = 0  # rc DSX_NET_BUFFER_OVERWRITTEN / DSX_TOO_MANY_SAMPLES_AVAILABLE
-    gaps: int = 0  # timestamp jumps on sync channels
-    last_stamp: float = None
 
 
 class DSRemoteSession:
@@ -110,10 +103,8 @@ class DSRemoteSession:
 
         # Allocate channel buffers.
         for ch in self.channels.values():
-            ch.data = (c_double * buffer_samples)()
-            ch.stamps = (c_double * buffer_samples)()
-            ch.values_np = np.frombuffer(ch.data, dtype=np.float64)
-            ch.stamps_np = np.frombuffer(ch.stamps, dtype=np.float64)
+            ch.values_np = np.zeros(buffer_samples, dtype=np.float64)
+            ch.stamps_np = np.zeros(buffer_samples, dtype=np.float64)
 
         # Start measurment.
         check(self.dll.dsconStartMeasurement(self.inst), "dsconStartMeasurement")
@@ -123,25 +114,16 @@ class DSRemoteSession:
     def read(self, ch):
         # Read all new samples from the channel.
         n = c_size_t(self.capacity)
-        rc = self.dll.dsconChannelReadScalarData_2(ch.handle, ch.data, ch.stamps, byref(n))
+        rc = self.dll.dsconChannelReadScalarData_2(ch.handle,
+                                                   ch.values_np.ctypes.data_as(POINTER(c_double)),
+                                                   ch.stamps_np.ctypes.data_as(POINTER(c_double)),
+                                                   byref(n))
 
-        if rc in (DSX_NET_BUFFER_OVERWRITTEN, DSX_TOO_MANY_SAMPLES_AVAILABLE):
-            ch.overruns += 1
-        else:
+        if rc not in (DSX_NET_BUFFER_OVERWRITTEN, DSX_TOO_MANY_SAMPLES_AVAILABLE):
             check(rc, "dsconChannelReadScalarData_2")
 
         count = n.value
-        values, stamps = ch.values_np[:count], ch.stamps_np[:count]
-
-        if count:
-            # Synchronous channels (add timestamps).
-            if ch.ch_type == DSX_CH_SYNC and ch.last_stamp is not None and ch.rate > 0:
-                if stamps[0] - ch.last_stamp > GAP_FACTOR / ch.rate:
-                    ch.gaps += 1
-
-            ch.last_stamp = stamps[count - 1]
-
-        return values, stamps
+        return ch.values_np[:count], ch.stamps_np[:count]
 
     def stop(self):
         if self.started:

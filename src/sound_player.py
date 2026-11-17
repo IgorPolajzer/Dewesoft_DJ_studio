@@ -9,6 +9,7 @@ from src.utils.util import PROJECT_ROOT
 
 BLOCK_FRAMES = 256 # fixed callback block size (~5 ms at 48 kHz)
 
+# Slider value range.
 SLIDER_MIN = 0.0
 SLIDER_MAX = 100.0
 
@@ -27,29 +28,6 @@ CLICK_SAMPLES = 48
 FORK_LATENCY_S = 0.1
 
 
-def mix_gains(mixer, volume):
-    """Song gains (gA, gB) from the raw slider values (0..100).
-
-    x = mixer / 100  (0 = only the first song, 1 = only the second song)
-    v = volume / 100 (0 = silent, 1 = full)
-    gA = v² · cos(x·π/2),  gB = v² · sin(x·π/2)
-
-    Equal-power crossfade: gA² + gB² = v⁴, so the loudness stays constant across the fade.
-    v² makes the volume slider feel even along its travel. No headroom: around x = 0.5 the
-    gain sum reaches 1.41, so loud passages of both songs together can clip.
-    """
-    x = min(max(mixer / SLIDER_MAX, 0.0), 1.0)
-    v = min(max(volume / SLIDER_MAX, 0.0), 1.0)
-    level = v * v
-    return level * math.cos(x * math.pi / 2), level * math.sin(x * math.pi / 2)
-
-
-def volume_gain(volume):
-    """Gain v² from the raw volume slider value (0..100), as used for the songs."""
-    v = min(max(volume / SLIDER_MAX, 0.0), 1.0)
-    return v * v
-
-
 class SoundPlayer:
     def __init__(self, first_song_path, second_song_path, first_gain, second_gain):
         device, rate, channels = _find_wasapi_output()
@@ -58,10 +36,11 @@ class SoundPlayer:
         # Load both song files into RAM, resampled to the device rate.
         self.songs = [_load_audio(path, rate, channels) for path in (first_song_path, second_song_path)]
 
-        self.positions = [0.0, 0.0] # Positions of songs (fractional sample index).
-        self.speeds = [1.0, 1.0] # Playback speed of each song (1 = original, 0 = stopped)
-        self.gains = [float(first_gain), float(second_gain)] # the gain each song is playing at right now
-        self.target_gains = [float(first_gain), float(second_gain)] # the gain each song should ramp to (set by set_gains)
+        # Songs
+        self.song_positions = [0.0, 0.0] # Positions of songs (fractional sample index).
+        self.song_speeds = [1.0, 1.0] # Playback speed of each song (1 = original, 0 = stopped)
+        self.song_gains = [float(first_gain), float(second_gain)] # the gain each song is playing at right now
+        self.song_target_gains = [float(first_gain), float(second_gain)] # the gain each song should ramp to (set by set_gains)
 
         # Drum sounds.
         self.drums = [_load_audio(os.path.join(DRUM_DIR, f), rate, channels) for f in sorted(os.listdir(DRUM_DIR))]
@@ -77,9 +56,10 @@ class SoundPlayer:
         self._note_gain = 0.0
         self._note_request = None
 
-        self._click_pending = True  # sync click, played once at the start of the first block
+        # Sync click.
+        self._click_pending = True
 
-        # Tuning fork: its own stream at the channel rate, opened by open_fork().
+        # Tuning fork (its own stream at the channel rate).
         self.fork_stream = None
         self._fork_gain = 1.0
 
@@ -98,25 +78,25 @@ class SoundPlayer:
 
     def set_gains(self, first_gain, second_gain):
         """Set the target gains; the callback ramps to them over the next block."""
-        self.target_gains[0] = float(first_gain)
-        self.target_gains[1] = float(second_gain)
+        self.song_target_gains[0] = float(first_gain)
+        self.song_target_gains[1] = float(second_gain)
 
     def set_speeds(self, first_speed, second_speed):
         """Set the playback speeds (turntable style: pitch follows speed). Applies from the next block."""
-        self.speeds[0] = max(float(first_speed), 0.0)
-        self.speeds[1] = max(float(second_speed), 0.0)
+        self.song_speeds[0] = max(float(first_speed), 0.0)
+        self.song_speeds[1] = max(float(second_speed), 0.0)
 
     def play_drum(self, index, strength, volume):
         """Play drum `index` once at `gain`. A drum that is still playing is cut off and replaced."""
-        s = min(max(strength / DRUM_STRENGTH_MAX, 0.0), 1.0)
-        v = min(max(volume / SLIDER_MAX, 0.0), 1.0)
+        s = normalise(strength, DRUM_STRENGTH_MAX)
+        v = normalise(volume, SLIDER_MAX)
         gain = s * v * v
 
         self._drum_request = (index, float(gain))
 
     def play_note(self, direction, volume):
         """Play the forward (1) or backward (-1) note once at gain v². A note that is still playing is cut off and replaced."""
-        self._note_request = (direction, volume_gain(volume))
+        self._note_request = (direction, tuning_fork_gain(volume))
 
     def set_fork_gain(self, gain):
         """Gain of the tuning fork stream (values are played as they come, so ranges above 1 are louder)."""
@@ -150,10 +130,12 @@ class SoundPlayer:
     def _callback(self, out, frames, time_info, status):
         out.fill(0)
 
+        # Song processing.
         for i, song in enumerate(self.songs):
-            pos, speed = self.positions[i], self.speeds[i]
+            pos, speed = self.song_positions[i], self.song_speeds[i]
 
-            last = len(song) - 2  # k and k + 1 samples needed for linear interpolation.
+            # k and k + 1 samples needed for linear interpolation.
+            last = len(song) - 2
             if speed > 0:
                 n = min(frames, math.floor((last - pos) / speed) + 1)
             else:
@@ -164,7 +146,7 @@ class SoundPlayer:
                 continue
 
             # Linear gain ramp from the previous gain to the target over this block.
-            g0, g1 = self.gains[i], self.target_gains[i] # where we are, where we want to be
+            g0, g1 = self.song_gains[i], self.song_target_gains[i] # where we are, where we want to be
 
             # Compute the gain.
             gain = self._gain_buf[:n]
@@ -195,10 +177,10 @@ class SoundPlayer:
             out[:n] += mix
 
             # Adjust the values for the next block.
-            self.gains[i] = g1
-            self.positions[i] = pos + n * speed
+            self.song_gains[i] = g1
+            self.song_positions[i] = pos + n * speed
 
-        # Start a requested drum from the beginning, replacing any drum that is still playing.
+        # Start a requested drum. Eeplacing any drum that is still playing.
         request = self._drum_request
         if request is not None:
             self._drum_request = None
@@ -206,7 +188,7 @@ class SoundPlayer:
             self._drum_gain = request[1]
             self._drum_pos = 0
 
-        # Mix the playing drum on top of the songs.
+        # Mix the drum on top of the songs.
         if self._drum is not None:
             drum, pos = self._drum, self._drum_pos
             n = min(frames, len(drum) - pos)
@@ -218,7 +200,7 @@ class SoundPlayer:
             if self._drum_pos >= len(drum):
                 self._drum = None
 
-        # Start a requested note from the beginning, replacing any note that is still playing.
+        # Start a requested note, replacing any note that is still playing.
         request = self._note_request
         if request is not None:
             self._note_request = None
@@ -226,7 +208,7 @@ class SoundPlayer:
             self._note_gain = request[1]
             self._note_pos = 0
 
-        # Mix the playing note on top.
+        # Mix the note on top of the songs.
         if self._note is not None:
             note, pos = self._note, self._note_pos
             n = min(frames, len(note) - pos)
@@ -238,10 +220,37 @@ class SoundPlayer:
             if self._note_pos >= len(note):
                 self._note = None
 
-        # Sync click on the first block (overrides the song start for ~1 ms).
+        # Sync click on the first block.
         if self._click_pending:
             self._click_pending = False
             out[:CLICK_SAMPLES] = 100.0
+
+
+def normalise(value, maximum):
+    """value / maximum, clamped to 0..1."""
+    return min(max(value / maximum, 0.0), 1.0)
+
+
+def mix_gains(mixer, volume):
+    """Song gains (gA, gB) from the raw slider values (0..100).
+
+    x = mixer / 100  (0 = only the first song, 1 = only the second song)
+    v = volume / 100 (0 = silent, 1 = full)
+    gA = v² · cos(x·π/2),  gB = v² · sin(x·π/2)
+
+    Equal-power crossfade: gA² + gB² = v⁴, so the loudness stays constant across the fade.
+    v² makes the volume slider feel even along its travel.
+    """
+    x = normalise(mixer, SLIDER_MAX)
+    v = normalise(volume, SLIDER_MAX)
+    level = v * v
+    return level * math.cos(x * math.pi / 2), level * math.sin(x * math.pi / 2)
+
+
+def tuning_fork_gain(volume):
+    """Gain v² from the raw volume slider value (0..100), as used for the songs."""
+    v = normalise(volume, SLIDER_MAX)
+    return v * v
 
 
 def _find_wasapi_output():

@@ -14,14 +14,24 @@ NET_HOST = "localhost"
 NET_CMD_PORT = "8999"
 NET_DATA_PORT = "8001"
 
-# A timestamp step larger than this many sample periods counts as a gap (lost samples).
-GAP_FACTOR = 1.5
+
+class DSRemoteError(RuntimeError):
+    def __init__(self, fn, rc, detail=""):
+        self.fn = fn
+        self.rc = rc
+        msg = "%s failed: %s (%d)" % (fn, rc_name(rc), rc)
+        super().__init__(msg + (" - " + detail if detail else ""))
+
+
+def check(rc, fn):
+    if rc < 0:
+        raise DSRemoteError(fn, rc)
+    return rc
 
 
 def load_dll(path):
     dll = WinDLL(path)
 
-    # Type aliases matching examples/Cpp/include/DSRemoteConnect.h and DSXInstance.h
     handle = c_void_p  # DSXInstanceHandle, ChannelInstanceHandle
     handle_out = POINTER(c_void_p)  # ...Handle* (the DLL writes a handle)
     channel_id = c_char_p  # ChannelID      = char*
@@ -82,23 +92,8 @@ def load_dll(path):
 
 
 def check_net_server(host, port, timeout=2.0):
-    # dsconConnect returns 0 even when nothing is listening, so check the command port ourselves.
     try:
         with socket.create_connection((host, int(port)), timeout=timeout):
             pass
     except OSError as e:
         raise RuntimeError("Cannot reach the Dewesoft NET server at %s:%s (%s).\n" % (host, port, e))
-
-
-class DSRemoteError(RuntimeError):
-    def __init__(self, fn, rc, detail=""):
-        self.fn = fn
-        self.rc = rc
-        msg = "%s failed: %s (%d)" % (fn, rc_name(rc), rc)
-        super().__init__(msg + (" - " + detail if detail else ""))
-
-
-def check(rc, fn):
-    if rc < 0:
-        raise DSRemoteError(fn, rc)
-    return rc

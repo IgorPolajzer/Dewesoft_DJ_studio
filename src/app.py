@@ -2,14 +2,14 @@ import time
 
 from src.dsremote import DSRemoteSession
 from src.encoder_mode import EncoderMode
-from src.sound_player import SoundPlayer, mix_gains, volume_gain
+from src.sound_player import SoundPlayer, mix_gains, tuning_fork_gain
 from src.utils.util import EXIT_OK
 
-# DSRemote ring buffer per channel, in samples. The sliders send at most 100 values/s, so any size
-# is far more than one 5 ms poll needs. 102400 worked with Master + one slider in tests.
+# DSRemote ring buffer per channel.
 BUFFER_SAMPLES = 102400
 POLL_INTERVAL_S = 0.005 # 5ms.
 
+# Start values.
 START_MIXER = 0.0
 START_VOLUME = 100.0
 START_DRUM = 0.0
@@ -18,7 +18,7 @@ NOTE_VOLUME_FACTOR = 0.5
 
 START_ENCODER_MODE = EncoderMode.NOTE
 
-# DewesoftX data file (DCOM storing), timestamped so no file is ever overwritten.
+# DewesoftX data file.
 STORE_FILE_FORMAT = "dj_studio_%Y%m%d_%H%M%S.dxd"
 
 
@@ -35,8 +35,6 @@ class DJStudioApp:
         self.volume = START_VOLUME
         self.drum_selection = START_DRUM
         self.encoder_mode = START_ENCODER_MODE
-        self.frozen = False
-        self.last_freeze = 0.0
 
         self.rpm = None  # latest encoder RPM in BPM mode.
         self.session = None
@@ -46,7 +44,7 @@ class DJStudioApp:
     def run(self):
         self.player = SoundPlayer(self.config.first_song["path"], self.config.second_song["path"],
                                   *mix_gains(self.mixer, self.volume))
-        self.player.set_fork_gain(volume_gain(self.volume))
+        self.player.set_fork_gain(tuning_fork_gain(self.volume))
 
         try:
             with DSRemoteSession(self.host, self.cmd_port, self.data_port) as session:
@@ -59,7 +57,6 @@ class DJStudioApp:
                     self.config.encoder_mode_channel,
                     self.config.encoder_channel,
                     self.config.tuning_fork_channel,
-                    self.config.freeze_channel,
                 ])
 
                 session.start(BUFFER_SAMPLES)
@@ -79,7 +76,6 @@ class DJStudioApp:
                         self._drums()
                         self._encoder()
                         self._tuning_fork()
-                        self._freeze()
                     except KeyboardInterrupt:
                         break
 
@@ -88,17 +84,6 @@ class DJStudioApp:
                 self.player.stop()
 
         return EXIT_OK
-
-    def _freeze(self):
-        """Freeze button: every press (first 1 after a 0) toggles the screen freeze; the following 0s are ignored."""
-        values, _ = self.session.read(self.channels[self.config.freeze_channel])
-
-        for value in values:
-            if value == 1 and self.last_freeze != 1:
-                self.frozen = not self.frozen
-                self.dcom.freeze_screen(self.frozen)
-
-            self.last_freeze = value
 
     def _music(self):
         """Mixer and volume sliders -> song gains."""
@@ -116,7 +101,7 @@ class DJStudioApp:
             self.mixer, self.volume = new_mixer, new_volume
             if self.player:
                 self.player.set_gains(*mix_gains(self.mixer, self.volume))
-                self.player.set_fork_gain(volume_gain(self.volume))
+                self.player.set_fork_gain(tuning_fork_gain(self.volume))
 
     def _drums(self):
         """Drum selection (dropdown 0-3) and drum hits (strengths 1-10)."""
