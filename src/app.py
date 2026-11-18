@@ -116,7 +116,6 @@ class DJStudioApp:
 
             index = int(round(self.drum_selection))
             if self.player and 0 <= index < len(self.player.drums):
-                # print(f"Drum hit (strength level: {strength}).")
                 self.player.play_drum(index, strength, (self.volume * DRUM_VOLUME_FACTOR))
 
     def _encoder(self):

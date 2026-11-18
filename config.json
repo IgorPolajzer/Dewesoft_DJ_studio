@@ -6,15 +6,15 @@
     "drum_channel": "Drum trigger",
     "encoder_mode_channel": "Encoder_mode",
     "encoder_channel": "Encoder output",
-    "tuning_fork_channel": "TuningFork/Filter,Tuning_fork_range/Tuning fork",
+    "tuning_fork_channel": "Tuning fork sound",
     "first_song": {
-        "path": "C:\\Users\\igor.polajzer\\Desktop\\Dewesoft\\projects\\First_project\\Signal_to_sound_converter\\assets\\songs\\Luke_Bergs_Aurora.mp3",
-        "sample_rate": 44100,
-        "bpm": 129.2
+        "path": "C:\\Users\\igor.polajzer\\Desktop\\Dewesoft\\projects\\First_project\\Signal_to_sound_converter\\assets\\songs\\Peggy_Gou_Nanana.mp3",
+        "sample_rate": 48000,
+        "bpm": 130.81
     },
     "second_song": {
-        "path": "C:\\Users\\igor.polajzer\\Desktop\\Dewesoft\\projects\\First_project\\Signal_to_sound_converter\\assets\\songs\\Spiring_Late_Night.mp3",
-        "sample_rate": 44100,
-        "bpm": 99.38
+        "path": "C:\\Users\\igor.polajzer\\Desktop\\Dewesoft\\projects\\First_project\\Signal_to_sound_converter\\assets\\songs\\Dombresky_In_My_Room_ft_SHELLS_Insomniac_Records.mp3",
+        "sample_rate": 48000,
+        "bpm": 130.81
     }
 }
