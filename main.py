@@ -3,7 +3,7 @@ from time import sleep
 
 from src.app import DJStudioApp
 from src.config import Config
-from src.dcom_util import DcomUtil
+from src.utils.dcom_util import DcomUtil
 from src.utils.dsremote_util import NET_CMD_PORT, NET_DATA_PORT, NET_HOST
 from src.utils.util import EXIT_NOT_OK
 
