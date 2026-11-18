@@ -62,13 +62,13 @@ The DewesoftX C++ Scripts that process the sensor signals are in a separate repo
 
 3. **Set up the C++ Scripts**
 
-   Follow the setup in the [C++ Scripts repository](https://github.com/IgorPolajzer/Dewesoft_DJ_studio_cpp_scripts): install DSMinGW, set the project path in the scripts and point the C++ Script channels in `Dewesoft_DJ_Booth.dxs` to the script files.
+   Follow the setup in the [C++ Scripts repository](https://github.com/IgorPolajzer/Dewesoft_DJ_studio_cpp_scripts).
 
 4. **Adjust the paths in the DewesoftX files**
 
    The setup and sequence contain absolute paths that must match your system:
 
-   - `Dewesoft_DJ_Booth.dxs`: in each C++ Script channel, the paths to the C++ source files.
+   - `Dewesoft_DJ_Booth.dxs`: in each C++ Script channel, the include directories pointing to the C++ repository (see step 3).
    - `Dewesoft_DJ_Booth.dxt`: the two *Execute* steps (*Saving your song selection* and *DJ Studio loading...*) run `write_config.py` and `main.py`. In both steps:
      - set the **Python interpreter** path to `.venv\Scripts\pythonw.exe` in your project folder (the virtual environment from step 1, which has the dependencies installed);
      - set the script path in the parameters to your project folder.
